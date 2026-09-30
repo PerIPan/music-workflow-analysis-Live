@@ -113,6 +113,11 @@ class MockLive:
         if t == 'search_browser':
             return {'results': [{'name': p['query'] + ' Kit', 'uri': 'uri:' + p['query'],
                                  'is_loadable': True}]}
+        if t == 'set_track_output_routing':
+            names = [x['name'] for x in self.tracks]
+            if p['routing_type'] in names:
+                self.tracks[p['track_index']]['out'] = p['routing_type']
+            return {'output_routing_type': self.tracks[p['track_index']].get('out', 'Master')}
         if t == 'load_browser_item':
             self.tracks[p['track_index']]['devices'].append({'name': p['item_uri']})
             return {'loaded': True}
@@ -268,6 +273,14 @@ def main():
     check('tracks: stem, muted mix, new parts', names == [
         'VOX · orig', 'MIX · orig (A/B)', 'DRUMS · new (as-analysed)',
         'BASS · new (as-analysed)', 'KEYS · new (as-analysed)'] and m.tracks[1]['mute'], names)
+    fx = {t['name']: [d['name'].split(':', 1)[1] for d in t['devices'] if d['name'].startswith('uri:')]
+          for t in m.tracks}
+    check('devices on every track by role; the A/B mix stays clean',
+          fx['VOX · orig'] == ['EQ Eight', 'Compressor'] and fx['MIX · orig (A/B)'] == []
+          and fx['DRUMS · new (as-analysed)'][-2:] == ['Drum Buss', 'EQ Eight']
+          and fx['BASS · new (as-analysed)'][-2:] == ['EQ Eight', 'Compressor'], fx)
+    check('no mastering bus unless asked (--master-bus)',
+          'MASTER_BUS' not in fx and not any(t.get('out') for t in m.tracks), list(fx))
     check('FULL + one scene per section, named',
           m.scenes[0].startswith('FULL') and m.scenes[1] == 'Intro · bars 1-2'
           and m.scenes[2] == 'Verse · bars 3-8', m.scenes[:3])

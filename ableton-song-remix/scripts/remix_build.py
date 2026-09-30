@@ -76,6 +76,12 @@ def ok(reply) -> bool:
     return not (isinstance(res, dict) and (res.get('error') or res.get('success') is False))
 
 
+MASTER_BUS = 'MASTER_BUS'
+MASTER_CHAIN = ('EQ Eight', 'Glue Compressor', 'Limiter')     # in signal order
+TRACK_FX = {'vocals': ('EQ Eight', 'Compressor'), 'bass': ('EQ Eight', 'Compressor'),
+            'drums': ('Drum Buss', 'EQ Eight'), 'keys': ('EQ Eight', 'Compressor'),
+            'other': ('EQ Eight', 'Compressor')}               # per role; 'mix' (A/B) stays clean
+
 class Sim:
     """Replies for --dry-run: an empty Set with 8 unnamed scenes; no socket is opened."""
 
@@ -115,12 +121,16 @@ class Sim:
                                      {'beat_time': 1.0, 'sample_time': 0.5}]}
         if cmd == 'duplicate_clip':
             return {'new_index': p.get('_expect')}
+        if cmd == 'set_track_output_routing':
+            return {'output_routing_type': p['routing_type']}
         return {}
 
 
 class Builder:
-    def __init__(self, plan: dict, parts: dict, dry: bool, instruments: bool = True):
+    def __init__(self, plan: dict, parts: dict, dry: bool, instruments: bool = True,
+                 fx: bool = True, master_bus: bool = False):
         self.plan, self.parts, self.dry, self.instruments = plan, parts, dry, instruments
+        self.fx, self.master_bus_on = fx, master_bus
         self.sim = Sim(plan) if dry else None
         self.sent: list[tuple[str, dict]] = []
         self.warnings: list[str] = []
@@ -218,6 +228,40 @@ class Builder:
                     time.sleep(POLL_S)
         self.warnings.append(f'{part}: no instrument loaded (tried '
                              f"{self.parts.get('search', {}).get(part)}) - load one by hand")
+
+    def master_bus(self, idx: dict) -> None:
+        """Mastering: the MCP can't reach devices on Live's Master track, so every track feeds
+        an audio track MASTER_BUS carrying EQ Eight -> Glue Compressor -> Limiter (Live's
+        defaults: flat EQ, gentle glue, limiter ceiling below 0 dB). Starting points to set
+        by ear, not a finished master."""
+        bus = self('create_audio_track', index=-1)['index']
+        self('set_track_name', track_index=bus, name=MASTER_BUS)
+        for part, t in idx.items():
+            got = self('set_track_output_routing', track_index=t, routing_type=MASTER_BUS,
+                       routing_channel='')
+            if str(got.get('output_routing_type', '')).lower() != MASTER_BUS.lower():
+                self.warnings.append(f'{part}: output not routed to {MASTER_BUS} (Live says '
+                                     f"{got.get('output_routing_type')!r}) - set it by hand")
+        self.report['master_bus'] = {'track': bus,
+                                     'devices': self.fx_chain(bus, MASTER_CHAIN, MASTER_BUS)}
+
+    def fx_chain(self, track: int, chain, label: str) -> list:
+        """Load audio effects after whatever the track holds, in order; returns those loaded."""
+        loaded = []
+        for fx in chain:
+            res = self('search_browser', query=fx, category='audio_effects').get('results', [])
+            item = next((x for x in res if x.get('is_loadable') and x.get('uri')
+                         and x.get('name', '').lower().startswith(fx.lower())), None)
+            if item and ok(self.raw('load_browser_item', track_index=track, item_uri=item['uri'])):
+                loaded.append(fx)
+            else:
+                self.warnings.append(f'{label}: {fx} not loaded - add it by hand')
+        return loaded
+
+    def track_fx(self, idx: dict) -> None:
+        """A starting chain on every track by role (TRACK_FX), Live's defaults - set by ear."""
+        self.report['track_fx'] = {name: self.fx_chain(t, TRACK_FX[name], name)
+                                   for name, t in idx.items() if name in TRACK_FX}
 
     def scenes(self, base: int) -> None:
         have = len(self('get_all_scenes').get('scenes', []))
@@ -391,6 +435,10 @@ class Builder:
         self.scenes(base)
         self.midi(idx, base)
         self.audio(idx, base)
+        if self.fx:
+            self.track_fx(idx)
+        if self.master_bus_on:
+            self.master_bus(idx)
         self.report['scenes'] = {'full': base, 'sections': base + 1}
 
 
@@ -401,6 +449,10 @@ def main() -> None:
     ap.add_argument('--dry-run', action='store_true', help='print the commands; no socket')
     ap.add_argument('--force', action='store_true', help='append to a Set that has clips')
     ap.add_argument('--no-instruments', action='store_true')
+    ap.add_argument('--no-fx', action='store_true', help='no effects on the tracks')
+    ap.add_argument('--master-bus', action='store_true',
+                    help='also route everything into a MASTER_BUS track with EQ Eight, Glue '
+                         'Compressor and Limiter (off by default)')
     a = ap.parse_args()
     plan_p = Path(a.plan)
     plan = json.loads(plan_p.read_text())
@@ -414,7 +466,7 @@ def main() -> None:
     missing = [s['path'] for s in plan['stems'] if not Path(s['path']).is_file()]
     if missing:
         sys.exit(f'remix_build: stem files missing: {missing}')
-    b = Builder(plan, parts, a.dry_run, not a.no_instruments)
+    b = Builder(plan, parts, a.dry_run, not a.no_instruments, not a.no_fx, a.master_bus)
     try:
         b.run(a.force)
     except Stop as e:

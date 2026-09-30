@@ -57,6 +57,11 @@ Say the plan back in one line before building.
 | 4 Review | `remix_build.py <plan> --dry-run` | the command list; nothing sent |
 | 5 Build | `remix_build.py <plan>` | the Session; `build_report.json` |
 
+Every track gets a starting effects chain by role (vocal/bass/keys: EQ Eight → Compressor;
+drums: Drum Buss → EQ Eight; the muted A/B mix stays clean) at Live's defaults — set by ear.
+`--no-fx` skips it; `--master-bus` also routes everything into a `MASTER_BUS` track with EQ
+Eight → Glue Compressor → Limiter (the MCP can't load devices on Live's Master track).
+
 All scripts run with `python3` and the standard library. `NEEDS A DECISION` (exit 2 from
 the plan) is a question for the user: ask, then re-run with the answer (`--tempo <BPM>` /
 `--stretch-anyway` / `--preroll N`). After any re-run of the plan, re-run step 3: the

@@ -8,6 +8,9 @@ description: Use when a song recording has to become tempo, time signature, key,
 Song-agnostic pipeline, validated over many real projects (dream pop, Greek laiko, punk
 reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 
+**Deliverable:** one self-contained HTML per song — the chord+lyric chart plus the
+commentary (Phase 8). The JSON artifacts are working files, not the answer.
+
 **References (read on demand):**
 - `references/meter-detection.md` — how the meter sweep works, reading its output, calibration
 - `references/stems.md` — separation options, speeds, cache, quality checks
@@ -22,7 +25,10 @@ reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 
 1. **Audio file** — mp3/wav of the song (full mix).
 2. **Lyrics** — canonical text from an official source. Section labels (Verse, Chorus,
-   Bridge…) come from this, not from the analyzer.
+   Bridge…) come from this, not from the analyzer. **Not supplied? Get them before
+   Phase 1** — Phase 6 needs them and a late search stalls the run. Search and
+   page-summary tools won't reproduce lyrics: fetch the page HTML (curl with a browser
+   User-Agent) and parse the lyric lines; if a site blocks scripted requests, try another.
 
 ## Tool per step
 
@@ -41,6 +47,12 @@ reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 (`references/environment-setup.md`). Below, `ST=stems/htdemucs_ft/<song>`. After any
 phase, `scripts/validate_artifacts.py analysis` checks the hand-offs (grid, grouping,
 cell coverage, time order) — run it before building on a result.
+
+**Run order.** Start stems (Phase 2) in the background first — several songs one after
+another, not at once, on one GPU — and do Phase 1 and the lyrics meanwhile. Whisper
+(Phase 5) needs only the vocal stem: background it while the meter is settled. Everything
+keyed by `(bar, cell)` — lyric alignment, chords, mode — waits for the **downbeat check**
+in Phase 4; moving beat 1 afterwards means re-running all of it.
 
 ## Phase 1 — Pulse and key (no meter assumed)
 
@@ -106,6 +118,15 @@ cycle (eighth or quarter pulse — 11/8 vs 11/4 doubles Live's tempo). Reading t
 calibration, and why beat trackers' own downbeats aren't used:
 `references/meter-detection.md`.
 
+**Four-on-the-floor kits** (kick on every beat) give the kick band no cycle, so the sweep
+reports INCONCLUSIVE or a bare duple; the bass and harmonic bands carry the meter, and a
+2-and-4 backbeat can't tell pulse 0 from pulse 2. When you must pick beat 1 yourself,
+weigh (strongest first): the first full-band hit at the song's start (a drum-only pickup
+before it is common); the phase where bass and chords change (Phase 4 downbeat check).
+Cymbal accents alone are weak — a crash pattern can sit on beat 3. `--cycle` and
+`--downbeat-pulse` are recorded as `user` in `provenance`; if you chose them, not the
+player, say so in the chart header and list it as an open question.
+
 **Cells.** Everything downstream (bass, chords, lyrics, chart) is keyed by `(bar, cell)`,
 one cell per group in `grouping`: 4/4 → 2+2 (the familiar half-bars), 3/4 → one cell,
 6/8 → 3+3, 11/8 as 6+5 → two unequal cells. Never split an odd bar at its midpoint.
@@ -127,7 +148,14 @@ slow songs (60–90 BPM) — count along. A `num_bars` far from
 
 `bass_notes.py`: **pyin** (why not CREPE: the `bass-transcribe` skill) → `bass.mid` and
 each pitch class's sounding time per `(bar, cell)`. basic-pitch only if the part is
-polyphonic. **The tonic is the pitch class the bass sustains longest** — not the key
+polyphonic.
+
+**Downbeat check — before anything else keyed by bar.** `bass_notes.py` counts where in
+the bar the bass changes pitch. If a later cell takes most changes (a loop moving on beat
+3 of 4/4), it prints `DOWNBEAT CHECK` with the corrected `--downbeat-pulse`: re-run
+`foundation.py meter` with it, then `bass_notes.py`. The one legitimate exception is
+harmony deliberately pushed off beat 1 — confirm with the song-start hit before shifting.
+ **The tonic is the pitch class the bass sustains longest** — not the key
 estimate. `mode_test.py` then names the mode by dueling characteristic degrees bar by bar
 (3 vs ♭3, 4 vs ♯4, 7 vs ♭7, 2 vs ♭2, 6 vs ♭6); a degree that doesn't sound doesn't vote,
 so a drone with no 6th reports "6th undetermined" instead of a guess. On a player-verified
@@ -223,7 +251,11 @@ Read `references/chart-and-lyrics.md` before building the chart. Core invariants
 - **Show the evidence:** a header line saying where meter, grouping and mode came from
   (`provenance`, `mode.json`), and each chord cell styled by its `status` — a "?" on
   root disagreements and near-ties, so the player's check goes where it's needed.
-- Output: single self-contained HTML, print-friendly, harmonic-notes block at the bottom.
+- Output: single self-contained HTML, print-friendly, containing, in order: a header
+  (tempo, meter, key/mode, each with provenance); a structure map (section → bars); the
+  chord+lyric chart; the commentary — per-section harmonic notes in scale degrees,
+  arrangement/groove notes (entries, drops, turnarounds), and the open questions for the
+  player (every call you made that the player hasn't confirmed).
 
 ## Benchmark
 

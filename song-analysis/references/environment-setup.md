@@ -69,7 +69,8 @@ Notes:
 - **mlx-demucs** (optional batch path) runs **plain htdemucs** (not `_ft`) ~9× faster than
   torch-CPU demucs; for `_ft`, use torch demucs on MPS instead.
 - Tests (offline, synthetic): in `song-analysis/`, `.venv-bp/bin/python` runs
-  `tests/test_detect_meter.py`, `test_chord_proposal.py` and `test_mode_test.py`;
+  `tests/test_detect_meter.py`, `test_chord_proposal.py`, `test_mode_test.py` and
+  `test_downbeat_check.py`;
   `python3` runs `tests/test_foundation.py` and `test_align_lyrics.py`; in `ableton-mcp/`,
   `python3 tests/test_push_notes.py`.
 

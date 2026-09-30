@@ -33,8 +33,11 @@ _TEMP_WAVS = []
 def decodable(path):
     """librosa >= 1.0 decodes only what libsndfile reads (wav/flac/ogg/mp3); 0.11 fell back
     to audioread. Transcode anything else (m4a, aac, webm, mp4) to a temp wav with ffmpeg;
-    the temp files are removed when the script exits."""
+    the temp files are removed when the script exits. Always absolute: lv-chordia resolves
+    a relative path against its own package directory, not the working directory."""
+    import os
     import soundfile as sf
+    path = os.path.abspath(path)
     try:
         sf.info(path)
         return path

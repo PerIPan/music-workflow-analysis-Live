@@ -55,6 +55,27 @@ def cells(downbeats, grouping):
             yield i + 1, k + 1, b0 + (b1 - b0) * edges[k], b0 + (b1 - b0) * edges[k + 1]
 
 
+def downbeat_check(per_cell, grouping, downbeat_pulse, min_sec=0.15, min_changes=8):
+    """Where in the bar does the bass change pitch? A loop that changes on a later cell
+    (beat 3 of 4/4) almost always means beat 1 is off by that cell's offset. Returns
+    (cell, share, suggested downbeat_pulse) when a later cell takes at least twice the
+    changes of cell 1, else None."""
+    counts, prev = [0] * len(grouping), None
+    for c in per_cell:
+        pcs = c["pc_seconds"]
+        top = max(pcs, key=pcs.get) if pcs else None
+        if top is None or pcs[top] < min_sec:
+            continue
+        if prev is not None and top != prev:
+            counts[c["cell"] - 1] += 1
+        prev = top
+    total = sum(counts)
+    k = max(range(len(counts)), key=counts.__getitem__)
+    if total < min_changes or k == 0 or counts[k] < 2 * counts[0]:
+        return None
+    return k + 1, counts[k] / total, (downbeat_pulse + sum(grouping[:k])) % sum(grouping)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("bass")
@@ -100,6 +121,13 @@ def main():
           if notes else "no bass notes found")
     print("longest-sustained pitch classes: " +
           ", ".join(f"{PCN[i]} {share[i]:.0%}" for i in top) + " (tonic candidate = the first)")
+    shifted = downbeat_check(per_cell, grouping, F.get("downbeat_pulse", 0))
+    if shifted:
+        cell, frac, dp = shifted
+        print(f"DOWNBEAT CHECK: {frac:.0%} of bass changes land on cell {cell}, not cell 1 - "
+              f"beat 1 is probably off. Unless the harmony is deliberately pushed, re-run "
+              f"foundation.py meter --downbeat-pulse {dp} (plus your --cycle/--grouping), "
+              f"then this script, before anything else keyed by bar.")
 
 
 if __name__ == "__main__":

@@ -29,7 +29,11 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
    Bridge…) come from this, not from the analyzer. **Not supplied? Get them before
    Phase 1** — Phase 6 needs them and a late search stalls the run. Search and
    page-summary tools won't reproduce lyrics: fetch the page HTML (curl with a browser
-   User-Agent) and parse the lyric lines; if a site blocks scripted requests, try another.
+   User-Agent) and parse the lyric lines; if a site blocks scripted requests, try another
+   (e.g. songlyrics.com, lyricsondemand.com). Some pages put a blank line after every line:
+   strip those, or every line becomes a section. Such text is unofficial: say so in the
+   provenance. Whisper only times it (Phase 6); don't use Whisper's text as the lyrics
+   unless no page has the song.
 
 ## Tool per step
 
@@ -94,6 +98,11 @@ confidence and every bar count inherits it. Writes `pulse_bpm`, `beat_times`,
 `key_top2` and `tempo_octave`: a pulse above 160 BPM is flagged as probably eighth notes
 (a 91 BPM soul track was tracked at 182), one below 70 as possibly half-time. If the
 user's count disagrees, re-run with `--min-bpm`/`--max-bpm` to force the other octave.
+A GRID REPAIR over a long stretch (a quiet intro) is the same slip — check the octave.
+**Cross-check online:** look the song up on songbpm.com and tunebat.com (page tools work
+there). They catch a gross error, but often list the doubled octave (a song at 87 shown as
+174, "87 half-time") and the melody's key — they don't decide the octave or the tonic;
+note what they say in the provenance.
 
 **Key: the top two are the melody's key, not the tonic.** The madmom CNN beats chroma +
 Krumhansl by ~20 MIREX points and fixes relative-major/minor flips, but knows only 24
@@ -143,7 +152,9 @@ a tempo octave for a stretch is repaired in Phase 1 (`grid_repair` lists where).
 **It stops with a question instead of guessing** — put that question to the user and
 re-run with their answer: INCONCLUSIVE (count along), a phrase-length cycle (8/16 → 4/4?),
 a bare duple (2/4 or 4/4?), two equally strong accents (which one is beat 1?), or an odd
-cycle (eighth or quarter pulse — 11/8 vs 11/4 doubles Live's tempo). Reading the sweep,
+cycle (eighth or quarter pulse — 11/8 vs 11/4 doubles Live's tempo). INCONCLUSIVE with
+one band clear (often the bass, when the kit enters late) — put that band's cycle and
+beat 1 to the user as the proposal, then `--cycle`/`--downbeat-pulse`. Reading the sweep,
 calibration, and why beat trackers' own downbeats aren't used:
 `references/meter-detection.md`.
 
@@ -197,8 +208,9 @@ for sharp keys — in F♯ minor a flat table writes the tonic `G♭m` and the d
 
 - Sub-0.5 s detections are noisy; ≥ 0.7 s sustained notes are usually right.
 - Bass pedals, walks, sits on 3rds/5ths — it's a *clue* to the root, not the chord.
-- **Bass enters late** in most songs: find the entry bar and ignore everything before it
-  (stem bleed).
+- **Bass enters late** in most songs: `bass_notes.py` prints `BASS ENTRY: bar N` when it
+  finds one — re-run it with `--bass-entry-bar N` and pass the same to `chord_proposal.py`
+  (earlier notes are stem bleed).
 
 ## Phase 5 — Lyric timing (Whisper, gated by the vocal stem)
 
@@ -218,7 +230,9 @@ error and the full mix 23.6%, but either one won by up to 25 points on single so
 lyrics, transcribe both and let Phase 6 keep the one matching more of the lyrics — that
 picked the better transcription every time (17.9%). Without lyrics, use the vocal stem.
 Force `--language` when detection wobbles (chant, non-English). Keep repeated lines —
-mantras are lyrics — until Phase 6 has aligned them.
+mantras are lyrics — until Phase 6 has aligned them. Whisper invents subtitle phrases over
+music ("Thanks for watching"): known ones are dropped, and `CHECK BY EAR` names any short
+phrase standing alone in an instrumental stretch.
 
 Map each word to a bar:
 
@@ -281,7 +295,8 @@ The chart is rendered: you write the decisions (sections, a chord per `(bar, cel
 lyric line at its anchor cell, the header, provenance and commentary) as a `SONG` dict in
 `gen_v<N>.py` (a new N per revision); `chart_html.py` reads everything measured from
 `analysis/`, so a re-run that keeps the bar grid needs only a re-render (a moved beat 1
-shifts every key). Read `references/chart-and-lyrics.md` first. Core invariants:
+shifts every key). Chords may be `chords_lv.json`'s labels (`A:min`, `G/b7`): the renderer
+converts them. Read `references/chart-and-lyrics.md` first. Core invariants:
 - Each section starts a new row; parallel sections get identical row splits.
 - Chart bar = audio bar; the renderer adds none (a final chord may ring on the bar that
   starts at the last downbeat).

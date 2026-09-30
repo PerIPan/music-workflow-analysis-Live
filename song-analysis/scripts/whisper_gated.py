@@ -16,7 +16,7 @@ Usage (the Whisper venv; Apple Silicon, needs mlx-whisper + librosa):
     <whisper-venv>/bin/python whisper_gated.py stems/htdemucs_ft/<song>/vocals.wav \
         [--mix <song.mp3>] [--language en] [--gate 0.1] [--out analysis/lyrics.json]
 """
-import argparse, json
+import argparse, re, json
 import numpy as np
 import librosa
 import mlx.core as mx
@@ -49,6 +49,43 @@ def sung_clips(y, sr, gate):
     return [(max(0.0, s0 - 0.4), min(dur, e0 + 0.4)) for s0, e0 in merged], t, sung
 
 
+# Phrases Whisper learned from subtitle credits and video outros; it emits them over music.
+ARTEFACTS = ("thanks for watching", "thank you for watching", "please subscribe",
+             "subscribe to", "subtitles by", "amara.org", "satsang with mooji",
+             "transcribed by", "captions by")
+
+
+def _key(w):
+    return re.sub(r"[^\w\s.]", "", w.lower())
+
+
+def drop_artefacts(words):
+    """Remove runs of words that spell a known Whisper artefact (see ARTEFACTS)."""
+    keys, bad = [_key(w["word"]) for w in words], set()
+    for i in range(len(words)):
+        for ph in ARTEFACTS:
+            n = len(ph.split())
+            if " ".join(keys[i:i + n]) == ph:
+                bad.update(range(i, i + n))
+    return ([w for i, w in enumerate(words) if i not in bad],
+            [dict(words[i], reason="whisper artefact") for i in sorted(bad)])
+
+
+def lonely_phrases(words, gap=10.0, max_words=4):
+    """Short phrases with no other word within `gap` s on either side: (start, end, text)."""
+    out, i = [], 0
+    while i < len(words):
+        j = i
+        while j + 1 < len(words) and words[j + 1]["start"] - words[j]["end"] < gap:
+            j += 1
+        before = words[i]["start"] - words[i - 1]["end"] if i else gap
+        after = words[j + 1]["start"] - words[j]["end"] if j + 1 < len(words) else gap
+        if j - i + 1 <= max_words and before >= gap and after >= gap:
+            out.append((words[i]["start"], words[j]["end"], " ".join(w["word"] for w in words[i:j + 1])))
+        i = j + 1
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("vocals", help="separated vocal stem - drives the gate (and is "
@@ -77,9 +114,15 @@ def main():
             for seg in res["segments"] for w in seg.get("words", [])]
     words = [w for w in allw if in_gate(w)]
     dropped = [w for w in allw if not in_gate(w)]
+    words, ghosts = drop_artefacts(words)
+    dropped += ghosts
+    for ph in lonely_phrases(words):
+        print(f"CHECK BY EAR: '{ph[2]}' at {ph[0]:.1f}-{ph[1]:.1f} s stands alone "
+              f"(>= 10 s from any other word) - a Whisper invention in an instrumental?")
     sung_s = sum(e - s for s, e in clips)
     print(f"{len(clips)} sung clips, {sung_s:.0f}/{len(y) / sr:.0f} s; "
-          f"{len(words)} words kept, {len(dropped)} dropped as silence; "
+          f"{len(words)} words kept, {len(dropped)} dropped as silence"
+          f"{f' or known artefacts ({len(ghosts)})' if ghosts else ''}; "
           f"language {res.get('language')}")
     if a.out:
         json.dump(dict(model=REPO, source="mix" if a.mix else "vocals",

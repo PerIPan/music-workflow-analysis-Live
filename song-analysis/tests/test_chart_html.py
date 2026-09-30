@@ -19,7 +19,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-from chart_html import bass_em, label_em, render  # noqa: E402
+from chart_html import bass_em, label_em, lead_sheet, render  # noqa: E402
 
 TMP = Path(tempfile.mkdtemp(prefix="chart_html_"))
 atexit.register(shutil.rmtree, TMP, True)
@@ -170,6 +170,11 @@ def main():
           and '<div class="note-block open"><h3>Open</h3><ol>' in doc)
     check("bar-end on cell 2 only", all(("bar-end" in v[0].split()) == (k[1] == 2)
                                         for k, v in C.items()))
+    check("Harte labels -> lead sheet (A:min, C:maj7, G/5, G/b7, F:maj/3, N, E:hdim7)",
+          [lead_sheet(x) for x in ("A:min", "C:maj7", "G/5", "G/b7", "F:maj/3", "N", "E:hdim7")]
+          == ["Am", "Cmaj7", "G/D", "G/F", "F/A", "N.C.", "Em7b5"])
+    check("lead-sheet symbols pass through", [lead_sheet(x) for x in ("Em/D", "F#m7", "N.C.", "C6/9")]
+          == ["Em/D", "F#m7", "N.C.", "C6/9"])
     check("4/4 legend wording", "Each bar = 2 half-cells (beats 1–2 / beats 3–4); a thick line "
           "ends the bar." in doc and "this half-bar's own reading" in doc)
     check("short rows keep cell width (1 bar, 3 bars)",
@@ -467,7 +472,7 @@ def main():
                       ("notes as a dict refused", dict(S, notes={"Verse": "<p>x</p>"})),
                       ("lyric not a (text, kind) tuple refused", dict(S, lyrics={(2, 1): "Oh"})),
                       ("chords keyed by bar alone refused", dict(S, chords={1: "E"})),
-                      ("Harte chord label refused", dict(S, chords={**ch, (1, 1): "E:maj"})),
+                      ("a chord that is not text refused", dict(S, chords={**ch, (1, 1): 5})),
                       ("a single brace in method refused", dict(S, method="<p>{see notes}</p>")),
                       ("unknown SONG key refused", dict(S, lyric={(2, 1): ("Oh", "")}))):
         try:

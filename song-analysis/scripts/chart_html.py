@@ -128,6 +128,31 @@ def root_pc(label: str | None) -> int | None:
     return PC[m.group(1) + m.group(2)] if m else None
 
 
+HARTE_Q = {'maj': '', 'min': 'm', '7': '7', 'maj7': 'maj7', 'min7': 'm7', 'dim': 'dim',
+           'dim7': 'dim7', 'hdim7': 'm7b5', 'aug': 'aug', 'sus2': 'sus2', 'sus4': 'sus4',
+           'maj6': '6', 'min6': 'm6', '9': '9', 'maj9': 'maj9', 'min9': 'm9', 'minmaj7': 'm(maj7)'}
+DEGREE = {'1': 0, 'b2': 1, '2': 2, 'b3': 3, '3': 4, '4': 5, 'b5': 6, '#4': 6, '5': 7, '#5': 8,
+          'b6': 8, '6': 9, 'bb7': 9, 'b7': 10, '7': 11}
+SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+
+
+def lead_sheet(label: str) -> str:
+    """chords_lv.json's Harte labels -> lead-sheet symbols; anything else passes through.
+    'A:min' -> 'Am', 'C:maj7' -> 'Cmaj7', 'G/5' -> 'G/D', 'G/b7' -> 'G/F', 'N' -> 'N.C.'."""
+    if label in ('N', 'X'):
+        return 'N.C.'
+    m = re.fullmatch(r'([A-G][#b]?)(?::([a-z0-9]+))?(?:/(b{0,2}#?[1-7]))?', label)
+    if not m or not (m.group(2) or m.group(3)):
+        return label
+    root, q, deg = m.groups()
+    name = root + HARTE_Q.get(q or 'maj', q or '')
+    if not deg:
+        return name
+    names = FLAT if ('b' in root[1:] or deg.startswith('b')) else SHARP
+    return f'{name}/{names[(PC[root] + DEGREE.get(deg, 0)) % 12]}'
+
+
 def split_slash(label: str) -> tuple[str, str | None]:
     """'Em/D' -> ('Em', 'D'); a slash not followed by a note name is part of the chord
     ('C6/9' -> ('C6/9', None))."""
@@ -570,8 +595,8 @@ def check_song(S: dict) -> None:
     bad = [k for k, c in S['chords'].items() if not isinstance(c, str) or ':' in c
            or c in ('N', 'X')]
     if bad:
-        raise ValueError("chords take lead-sheet symbols ('Am7', 'E/G#', 'N.C.'), not "
-                         f"chords_lv.json's Harte labels: {bad[:4]}")
+        raise ValueError("chords take lead-sheet symbols ('Am7', 'E/G#', 'N.C.') or chords_lv.json's labels; unreadable "
+                         f"ones: {bad[:4]}")
     bad = [k for k, n in S.get('bass_notes', {}).items()
            if not (isinstance(n, str) and re.fullmatch(r'[A-G][#b]?', n))]
     if bad:
@@ -645,6 +670,9 @@ def load_json(path: Path):
 def render(S: dict, out: str | Path | None = None) -> Path:
     """Write the chart for SONG dict S to out (default <folder>/<out>); returns the path."""
     S = {k: v for k, v in S.items() if v is not None}      # None = left out
+    if isinstance(S.get('chords'), dict):                  # accept chords_lv.json's labels
+        S['chords'] = {k: lead_sheet(c) if isinstance(c, str) else c
+                       for k, c in S['chords'].items()}
     check_song(S)
     folder = Path(S.get('folder', '.'))
     a = folder / 'analysis'

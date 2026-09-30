@@ -76,6 +76,23 @@ def downbeat_check(per_cell, grouping, downbeat_pulse, min_sec=0.15, min_changes
     return k + 1, counts[k] / total, (downbeat_pulse + sum(grouping[:k])) % sum(grouping)
 
 
+def entry_bar(per_cell, rel=0.4, run=3):
+    """First bar that starts `run` bars in a row, each with at least rel x the median bar's
+    bass time (before it, notes are stem bleed or a stray hit). 1 when the bass plays from
+    the start. Checked on three songs: bleed-only intros, a lone early hit, a bass from bar 1."""
+    per_bar = {}
+    for c in per_cell:
+        per_bar[c["bar"]] = per_bar.get(c["bar"], 0) + sum(c["pc_seconds"].values())
+    played = sorted(v for v in per_bar.values() if v > 0)
+    if not played:
+        return 1
+    floor = rel * played[len(played) // 2]
+    for b in sorted(per_bar):
+        if all(per_bar.get(b + k, 0) >= floor for k in range(run)):
+            return b
+    return 1
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("bass")
@@ -128,6 +145,12 @@ def main():
               f"beat 1 is probably off. Unless the harmony is deliberately pushed, re-run "
               f"foundation.py meter --downbeat-pulse {dp} (plus your --cycle/--grouping), "
               f"then this script, before anything else keyed by bar.")
+    if a.bass_entry_bar == 1:
+        eb = entry_bar(per_cell)
+        if eb > 1:
+            print(f"BASS ENTRY: bar {eb} (first of 3 bars in a row with real bass). Earlier "
+                  f"notes are probably stem bleed: re-run with --bass-entry-bar {eb}, and pass the "
+                  f"same to chord_proposal.py.")
 
 
 if __name__ == "__main__":

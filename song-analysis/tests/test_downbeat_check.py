@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test bass_notes.downbeat_check on synthetic per-cell bass tables.
+"""Test bass_notes.downbeat_check and entry_bar on synthetic per-cell bass tables.
 
 A 4-bar C-C-Bb-Bb loop read on a grid shifted by two beats changes on cell 2 every time:
 the check must flag it and suggest the shifted downbeat. The same loop on the right grid,
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from bass_notes import downbeat_check  # noqa: E402
+from bass_notes import downbeat_check, entry_bar  # noqa: E402
 
 
 def table(cells_per_bar, pcs):
@@ -32,9 +32,21 @@ def main():
         ("11/8 loop shifted by the 6", downbeat_check(table(2, loop_shift), [6, 5], 0), (2, 6)),
         ("sparse part", downbeat_check(table(2, sparse), [2, 2], 0), None),
     ]
+    bars = lambda secs: [dict(bar=b, cell=1, pc_seconds={"C": v} if v else {})
+                         for b, v in enumerate(secs, 1)]
+    for name, secs, want in [
+        ("entry after a silent intro", [0] * 12 + [0.9, 1.1, 0.8, 1.0] * 5, 13),
+        ("a lone early hit is not the entry", [0, 0, 0, 1.3, 0.5] + [0] * 8 + [0.9, 1.1, 0.4, 0.8] * 5, 14),
+        ("bass from bar 1", [1.2, 0.9, 1.3, 0.4] * 6, 1),
+        ("no bass at all", [0] * 8, 1),
+    ]:
+        cases.append((f"entry: {name}", entry_bar(bars(secs)), want))
     fails = 0
     for name, got, want in cases:
-        ok = (got is None) if want is None else (got is not None and (got[0], got[2]) == want)
+        if isinstance(want, int):
+            ok = got == want
+        else:
+            ok = (got is None) if want is None else (got is not None and (got[0], got[2]) == want)
         print(f"{'ok  ' if ok else 'FAIL'} {name}: {got}")
         fails += not ok
     sys.exit(1 if fails else 0)

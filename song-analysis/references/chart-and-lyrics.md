@@ -116,6 +116,15 @@ empty). A word that would spill stops in the cell before, in sung order.
 
 Patterns that recur across songs:
 
+- **"The change comes on 4&."** Players push chords: the change lands an eighth before the
+  bar line (or the cell) and rings into it, which gives a part its floating feel. The
+  audio readers can't see it — chord and bass readings smear across the two cells — so
+  listen for it and, where it's a habit, say so in the section's note ("changes on 4&,
+  an eighth early"). The chart keeps each chord in the cell where it rings.
+- **"A triad over a foreign bass is a seventh chord."** A cluster of "?" right after the
+  bass enters, where lv-chordia says `Am` and the bass holds F, is usually one chord:
+  Am over F = `Fmaj7` (Dm over B♭ = `B♭maj7`). Name the combined chord before calling
+  either reader wrong.
 - **"Anchor at the chord, not the syllable."** Pickups are visual artifacts; the chart's
   job is to show *where to play the chord change*. Rule 1.
 - **"Chord and lyric must live on the same row."** Row breaks fall every `bars_per_row`

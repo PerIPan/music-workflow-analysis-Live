@@ -23,7 +23,8 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
 
 ## Inputs
 
-1. **Audio file** — mp3/wav of the song (full mix).
+1. **Audio** — mp3/wav of the full mix. **Only a name?** Phase 0 fetches the recording
+   (opt-in; the user confirms the pick before anything is downloaded).
 2. **Lyrics** — canonical text from an official source. Section labels (Verse, Chorus,
    Bridge…) come from this, not from the analyzer. **Not supplied? Get them before
    Phase 1** — Phase 6 needs them and a late search stalls the run. Search and
@@ -34,6 +35,7 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
 
 | Phase | Tool | Output |
 |---|---|---|
+| 0 Audio (optional) | **`scripts/fetch_audio.py`** (yt-dlp: YouTube Music first; the user confirms the pick) | `<Artist> - <Title>.wav`, `source.json` |
 | 1 Pulse + key | **`scripts/foundation.py pulse`** (madmom beats + CNN key) | `foundation.json` (step 1) |
 | 2 Stems | **demucs `htdemucs_ft -d mps`** | `stems/htdemucs_ft/<song>/` |
 | 3 Meter | **`scripts/detect_meter.py`** → **`scripts/foundation.py meter`** | `meter.json`, `foundation.json` (step 2) |
@@ -43,7 +45,7 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
 | 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`** | `chords_lv.json`, `chord_proposal.json` |
 | 8 Chart | **`scripts/stem_activity.py`** → **`scripts/chart_html.py`** (per-song data file) | `stem_activity.json`, self-contained **HTML** chart |
 
-`<venv>` = the analysis venv; Whisper and lv-chordia have their own
+`<venv>` = the analysis venv; Whisper, lv-chordia and yt-dlp have their own
 (`references/environment-setup.md`). Below, `ST=stems/htdemucs_ft/<song>`. After any
 phase, `scripts/validate_artifacts.py analysis` checks the hand-offs (grid, grouping,
 cell coverage, time order) — run it before building on a result.
@@ -53,6 +55,32 @@ another, not at once, on one GPU — and do Phase 1 and the lyrics meanwhile. Wh
 (Phase 5) needs only the vocal stem: background it while the meter is settled. Everything
 keyed by `(bar, cell)` — lyric alignment, chords, mode — waits for the **downbeat check**
 in Phase 4; moving beat 1 afterwards means re-running all of it.
+
+## Phase 0 — Audio from a song's name (optional)
+
+Only when the user names a song instead of giving a file; needs the yt-dlp venv
+(`references/environment-setup.md`, step 6).
+
+```bash
+<ytdlp-venv>/bin/python scripts/fetch_audio.py --artist="<Artist>" --title="<Title>" \
+    --out-dir="<song folder>" [--duration=<length of the user's copy, s or m:ss>]
+```
+
+YouTube Music first (the labels' own uploads), then YouTube; uploads titled live, cover,
+karaoke, remix, sped up and the like are rejected, the rest ranked — 5–10 s, nothing
+downloaded. Spell the names properly (they name the WAV); Greek matches in either
+alphabet. `--duration` settles it: the label's or the artist's upload within ~2 s of the
+user's copy comes first.
+1. Tell the user the `* top pick` line — title, channel, length, album and year — and wait
+   for a yes. Label uploads sharing a title can be different recordings (a live album, a
+   re-recording, a budget compilation): name the album. Not label audio, or "misses a word
+   of the song"? Show the top three and let the user choose.
+2. On a yes, run the printed command; for another candidate, change its `--url=` (and
+   `--artist=` if the performer differs). It writes `<Artist> - <Title>.wav` and
+   `source.json` (URL, channel, format, dates, licence) into the song folder; cite it in
+   the chart's provenance line (`references/chart-and-lyrics.md`).
+3. Fetch only what the user has the right to study: YouTube's Terms restrict downloading.
+   No cookies or logins, ever.
 
 ## Phase 1 — Pulse and key (no meter assumed)
 
@@ -83,7 +111,8 @@ demucs -n htdemucs_ft -d mps -o stems /tmp/<song>.wav   # → $ST/{bass,drums,vo
 
 **Decode MP3 to WAV first:** demucs 4.1 reads MP3 without the gapless trim, so every stem
 starts 25 ms late against the mix — enough to smear bass and beat timing. `-d mps` on Apple
-Silicon (otherwise CPU, ~3× slower). **Check the model cache first** —
+Silicon (otherwise CPU, ~3× slower). A fetched WAV needs no decode: copy it to
+`/tmp/<song>.wav` (a name without spaces, so `$ST` needs no quoting). **Check the model cache first** —
 uncached, `htdemucs_ft` downloads 4 × 84 MB silently. Listen to `bass.wav` alone: piano or
 guitar in it means separation struggled. Faster/other options and timings:
 `references/stems.md`.

@@ -2,12 +2,12 @@
 
 Read this only when the toolchain isn't installed yet, or a venv broke.
 
-Five virtualenvs, one per role — TensorFlow (basic-pitch, crepe, ADTOF), torch (demucs,
+Six virtualenvs, one per role — TensorFlow (basic-pitch, crepe, ADTOF), torch (demucs,
 lv-chordia) and Whisper's MLX stack don't mix well, so keep them apart. Versions below are
 the latest releases as of September 2026 and were verified with this skill's scripts and
-benchmark (every output byte-identical to the previous stack); pin them. Uses
+benchmark (every output byte-identical to the previous stack); pin them — all but yt-dlp (6), which must stay current. Uses
 [uv](https://docs.astral.sh/uv/). Apple Silicon recommended; CUDA also works for demucs.
-Also needs **ffmpeg** on the PATH (MP3 decoding before separation, and m4a/aac/webm input).
+Also needs **ffmpeg** on the PATH (MP3 decoding before separation, m4a/aac/webm input, and audio fetched from YouTube).
 
 ```bash
 echo 'setuptools<81' > /tmp/build-constraints.txt     # for crepe's legacy build (see notes)
@@ -43,6 +43,11 @@ python3.10 -m venv .venv-adtof && source .venv-adtof/bin/activate
 pip install 'numpy==1.26.4' 'tensorflow==2.21.0' 'tf_keras==2.21.0' 'pretty_midi==0.2.11'
 pip install git+https://github.com/MZehren/ADTOF.git     # CC BY-NC-SA: install, never vendor
 deactivate                      # set TF_USE_LEGACY_KERAS=1 before importing it
+
+# (6) Optional — audio from YouTube: yt-dlp   (Python 3.12; kept current, never pinned)
+uv venv --python 3.12 .venv-ytdlp
+uv pip install --python .venv-ytdlp/bin/python -U "yt-dlp[default]"   # re-run when it breaks
+# "yt-dlp[default,deno]" also installs deno, the recommended JS runtime, into the venv
 ```
 
 Notes:
@@ -68,11 +73,19 @@ Notes:
   line in `whisper_gated.py`).
 - **mlx-demucs** (optional batch path) runs **plain htdemucs** (not `_ft`) ~9× faster than
   torch-CPU demucs; for `_ft`, use torch demucs on MPS instead.
+- **yt-dlp is the one tool not pinned.** YouTube changes often and yt-dlp follows within
+  days, so a pinned copy soon stops finding formats. When `fetch_audio.py` fails to search
+  or download, re-run the install line (`-U`) first. YouTube's challenges need a JavaScript
+  runtime: **deno ≥ 2.3** (recommended, sandboxed) or **node ≥ 22** (quickjs also works);
+  the script looks in the venv and on the PATH and warns when none is usable. ffmpeg
+  decodes the download to WAV; ffprobe is not needed. No cookies, logins or browser
+  profiles are used.
 - Tests (offline, synthetic): in `song-analysis/`, `.venv-bp/bin/python` runs
   `tests/test_detect_meter.py`, `test_chord_proposal.py`, `test_mode_test.py`,
   `test_downbeat_check.py` and `test_stem_activity.py`;
-  `python3` runs `tests/test_foundation.py`, `test_align_lyrics.py` and
-  `test_chart_html.py`; in `ableton-mcp/`, `python3 tests/test_push_notes.py`.
+  `python3` runs `tests/test_foundation.py`, `test_align_lyrics.py`, `test_chart_html.py`
+  and `test_fetch_audio.py` (no yt-dlp or network needed); in `ableton-mcp/`,
+  `python3 tests/test_push_notes.py`.
 
 ## Per-song working directory
 
@@ -80,7 +93,8 @@ Created fresh for each song:
 
 ```
 <song-slug>/
-├── <song>.mp3                          # input
+├── <song>.mp3                          # input, or <Artist> - <Title>.wav (fetch_audio.py)
+├── source.json                         # fetch_audio.py: where the audio came from
 ├── lyrics.txt                          # input (canonical text)
 ├── PLAN.md                             # decisions log
 ├── analysis/
@@ -113,6 +127,7 @@ The one place for local paths — every skill in this repo points here.
 | Stems (demucs 4.1.0, torch 2.14.0) | `~/dev/abletonAI/audio-analysis/.venv-demucs/bin/python -m demucs` |
 | Chords (Python 3.12: lv-chordia, librosa 1.0, torch 2.14) | `~/dev/abletonAI/audio-analysis/.venv-lvchordia/bin/python` |
 | Lyrics (mlx-whisper; only `whisper-large-v3-turbo` is cached) | `~/mlx-openai-whisper/bin/python` |
+| Audio from YouTube (yt-dlp, kept current; node 24 as its JS runtime) | `~/dev/abletonAI/audio-analysis/.venv-ytdlp/bin/python` |
 | Drums (ADTOF, optional) | `~/dev/abletonAI/audio-analysis/.venv-adtof/bin/python` |
 | Batch stems (plain htdemucs, MLX) | `~/dev/abletonAI/audio-analysis/mlx-demucs/.venv/bin/mlx-demucs` |
 | Trial venvs kept for re-runs | `.venv-asseg` (sections), `.venv-swiftf0`, `.venv-sep047` (+ `models-audio-separator/`) |

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440" role="img" aria-label="A recording becomes pulse, an 11/8 meter grouped 6+5, chords on the bar grid, timed lyrics, a band chart and an Ableton Live clip">
 <rect width="1200" height="440" rx="20" fill="#10151F"/>
-<text x="48" y="64" fill="#E6EAF0" font-family="'Avenir Next','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.3">music-workflow-skills</text>
-<text x="48" y="94" fill="#8D98A8" font-family="'Avenir Next','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="16">a recording → meter · mode · chords · lyrics → a band chart and a Live set</text>
+<text x="48" y="64" fill="#E6EAF0" font-family="'Avenir Next','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.3">song-analysis</text>
+<text x="48" y="94" fill="#8D98A8" font-family="'Avenir Next','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="16">name a song → meter · mode · chords · lyrics → a band chart, Live optional</text>
 <rect x="48" y="170" width="118" height="150" rx="12" fill="#171E2B" stroke="#2A3342"/>
 <ellipse cx="86" cy="258" rx="8.5" ry="6" transform="rotate(-22 86 258)" fill="#A79CFF"/>
 <ellipse cx="124" cy="250" rx="8.5" ry="6" transform="rotate(-22 124 250)" fill="#A79CFF"/>
@@ -9,7 +9,7 @@
 <rect x="130.3" y="198" width="2.4" height="50" fill="#A79CFF"/>
 <polygon points="92.3,206 132.7,198 132.7,203.5 92.3,211.5" fill="#A79CFF"/>
 <text x="107" y="292" text-anchor="middle" fill="#E6EAF0" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="14">song.mp3</text>
-<text x="107" y="310" text-anchor="middle" fill="#8D98A8" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="12">+ lyrics.txt</text>
+<text x="107" y="310" text-anchor="middle" fill="#8D98A8" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="12">or just its name</text>
 <path d="M176 245 H206" stroke="#8D98A8" stroke-width="2" fill="none"/>
 <path d="M204 239 L214 245 L204 251" stroke="#8D98A8" stroke-width="2" fill="none" stroke-linejoin="round"/>
 <rect x="214" y="118" width="642" height="290" rx="14" fill="#171E2B" stroke="#2A3342"/>
@@ -104,7 +104,7 @@
 <rect x="1036" y="208" width="45" height="19" rx="4" fill="#10151F" stroke="#2A3342"/>
 <rect x="1087" y="208" width="45" height="19" rx="4" fill="#10151F" stroke="#2A3342"/>
 <rect x="914" y="256" width="238" height="152" rx="14" fill="#171E2B" stroke="#2A3342"/>
-<text x="934" y="284" fill="#8D98A8" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" letter-spacing="1">ABLETON LIVE</text>
+<text x="934" y="284" fill="#8D98A8" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" letter-spacing="1">LIVE (OPTIONAL)</text>
 <text x="1132" y="284" text-anchor="end" fill="#A79CFF" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="11">11/8 · 81 BPM</text>
 <rect x="934" y="296" width="198" height="96" rx="6" fill="#10151F" stroke="#2A3342"/>
 <line x1="934.0" y1="296" x2="934.0" y2="392" stroke="#2A3342" stroke-width="1.6"/>

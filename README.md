@@ -1,26 +1,33 @@
-# music-workflow-skills
+# song-analysis
 
-**Claude Code skills that turn a recording into a band chart and an Ableton Live set —
+**Claude Code skills that turn a song into a band chart — chords, lyrics and commentary —
 including the odd meters, modes and drones that other analysis tools flatten into 4/4
-major/minor.**
+major/minor. No DAW needed; Ableton Live is an optional extra.**
 
-Give Claude a song and its lyrics. It finds the pulse, sweeps for the meter, separates
-stems, transcribes the bass, names the mode, reads the chords, times the lyrics, and writes
-a chart a band can play from — then, if you want, rebuilds it in Live with the right time
-signature. Everything runs offline on an Apple Silicon Mac, and every step is a script
-with tests.
+**Just name a song** — "analyze *Talk It Over* by Leon Bridges" — and Claude finds the
+recording, checks the pick with you, and analyzes it. Or hand it an mp3 and the lyrics. It
+finds the pulse, sweeps for the meter, separates stems, transcribes the bass, names the
+mode, reads the chords, times the lyrics, and writes a chart a band can play from. The
+analysis runs offline on an Apple Silicon Mac, and every step is a script with tests.
 
 ## The skills
 
+No DAW needed:
+
 | Skill | Use when |
 |---|---|
-| **`song-analysis`** | A recording has to become tempo, meter, key/mode, stems, bass line, chords per bar, timed lyrics, sections, or a band chart |
-| `song-to-ableton` | You want a song rebuilt, covered or reinterpreted in Live — analysis feeding the build |
+| **`song-analysis`** | A song (a file, or just its name) has to become tempo, meter, key/mode, stems, bass line, chords per bar, timed lyrics, sections, or a band chart |
 | `bass-transcribe` | You played bass (or sang a line) and want it as MIDI, a Live clip or a tab |
+
+Optional — only if you use **Ableton Live** (11/12, with the AbletonMCP server):
+
+| Skill | Use when |
+|---|---|
+| `song-to-ableton` | You want a song rebuilt, covered or reinterpreted in Live — analysis feeding the build |
 | `ableton-mcp` | Driving Live over MCP: tracks, clips, notes, devices, mixing, time signature — and the gotchas |
 | `ableton-arrangement` | Arranging in Live: sections, bass and drum patterns in any meter, FX chains, dynamics |
 
-![A recording becomes pulse, an 11/8 meter grouped 6+5, chords on the bar grid, timed lyrics, then a band chart and an Ableton Live clip](docs/img/pipeline.svg)
+![A song (or just its name) becomes pulse, an 11/8 meter grouped 6+5, chords on the bar grid, timed lyrics, then a band chart (and, optionally, an Ableton Live clip)](docs/img/pipeline.svg)
 
 ## Why it's different
 
@@ -43,7 +50,15 @@ See [how it compares](docs/COMPARISON.md) with 75 other tools, skills and papers
 
 ## What it looks like
 
-<!-- screenshot: a generated chord+lyric chart, e.g. docs/img/chart.png -->
+A chart it made (Mitski, "A Pearl") — chords per half-bar, bass notes in blue, lyrics where
+they're sung, sections in colour:
+
+![A generated band chart: sections in rows of bars, a chord per half-bar with the bass note in blue, lyrics under the chords](docs/img/chart-example.png)
+
+Further down the same page, the analysis — harmonic notes in scale degrees, the arrangement,
+and the open questions for the player:
+
+![The chart's harmonic notes: the progression in scale degrees, per section](docs/img/analysis-example.png)
 
 The meter sweep on a song in 11/8:
 
@@ -73,27 +88,49 @@ tonic E (57% of bass time) -> lydian
 ## Quick start
 
 ```bash
-git clone https://github.com/PerIPan/music-workflow-skills.git
-cd music-workflow-skills
-for s in song-analysis ableton-mcp ableton-arrangement song-to-ableton bass-transcribe; do
-  ln -sfn "$PWD/$s" ~/.claude/skills/$s
-done
+git clone https://github.com/PerIPan/song-analysis.git
+cd song-analysis
+for s in song-analysis bass-transcribe; do ln -sfn "$PWD/$s" ~/.claude/skills/$s; done
+# optional, Ableton Live users only:
+for s in song-to-ableton ableton-mcp ableton-arrangement; do ln -sfn "$PWD/$s" ~/.claude/skills/$s; done
 ```
 
 Set up the Python environments once —
 [`song-analysis/references/environment-setup.md`](song-analysis/references/environment-setup.md)
-has the exact, pinned commands. Restart Claude Code, put `song.mp3` and `lyrics.txt` in a
-folder, and ask:
+has the exact, pinned commands. Restart Claude Code and ask:
 
-> Analyze song.mp3 and make a chord chart for my band. Lyrics are in lyrics.txt.
+> Analyze "Talk It Over" by Leon Bridges and make a chord chart for my band.
 
-For the Live skills you also need the AbletonMCP server —
+or, with your own file: *Analyze song.mp3 and make a chord chart for my band. Lyrics are in
+lyrics.txt.*
+
+## Just name a song
+
+No file needed. Claude searches YouTube Music first, where the record labels' own uploads
+are, then YouTube. It skips uploads titled as live takes, covers, karaoke, remixes or
+sped-up edits, and shows you its pick — title, channel, length, album and year — before
+downloading anything. Once you confirm, the audio goes into the song folder as a WAV, with a
+`source.json` the chart's provenance line cites, and the analysis runs as usual. Give it the
+length of a copy you have and it picks that cut. In 17 test searches (September 2026: rock,
+jazz, soul, indie pop, and Greek songs typed in either alphabet) the pick was the label's
+own upload every time.
+
+It needs the optional yt-dlp venv ([setup](song-analysis/references/environment-setup.md)).
+Fetch only recordings you have the right to study: YouTube's Terms restrict downloading.
+No logins; nothing is uploaded.
+
+## Optional: Ableton Live
+
+Not needed for the chart. If you use Live, `song-to-ableton` rebuilds the analysed song in
+Live with the right tempo and time signature (chords, bass, drum logic, sections), driving
+it through the AbletonMCP server —
 [`ableton-mcp/references/setup-install.md`](ableton-mcp/references/setup-install.md).
 
 ## The pipeline
 
 | Phase | Script | Produces |
 |---|---|---|
+| 0 Audio (optional) | `fetch_audio.py` (yt-dlp) | the song as WAV + `source.json`, from its name |
 | 1 Pulse + key | `foundation.py pulse` | beat grid, tempo-octave check, key (top two) |
 | 2 Stems | demucs `htdemucs_ft` | bass, drums, vocals, other |
 | 3 Meter | `detect_meter.py` → `foundation.py meter` | cycle, grouping, downbeats, bar tempo, drift |
@@ -126,11 +163,12 @@ Run it yourself with `song-analysis/bench/run_bench.py` against your own verifie
 - Python 3.12 virtualenvs on current releases — NumPy 2.5, librosa 1.0, madmom (latest),
   TensorFlow 2.21, demucs 4.1, torch 2.14, lv-chordia 1.1, mlx-whisper 0.4 — about 2 GB of
   models; exact pins in the environment reference
-- For the Live skills: Ableton Live 11/12 and the AbletonMCP Remote Script
+- Optional, to fetch a song by name: yt-dlp (its own venv, kept current) and deno ≥ 2.3 or node ≥ 22
+- Optional, for the Live skills only: Ableton Live 11/12 and the AbletonMCP Remote Script
 
 ## Tests
 
-Offline, on synthetic audio or a mock Live socket — 135 checks:
+Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 296 checks:
 
 ```bash
 <analysis-venv>/bin/python song-analysis/tests/test_detect_meter.py
@@ -141,6 +179,7 @@ Offline, on synthetic audio or a mock Live socket — 135 checks:
 python3 song-analysis/tests/test_foundation.py
 python3 song-analysis/tests/test_align_lyrics.py
 python3 song-analysis/tests/test_chart_html.py
+python3 song-analysis/tests/test_fetch_audio.py
 python3 ableton-mcp/tests/test_push_notes.py
 ```
 

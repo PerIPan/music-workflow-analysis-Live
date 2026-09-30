@@ -35,7 +35,12 @@ def live(cmd, **params):
 
 
 def ok(reply):
-    return isinstance(reply, dict) and reply.get("status") == "success"
+    """Success = status "success" and no error hidden in the result (this fork returns
+    some failures inside a success reply)."""
+    if not (isinstance(reply, dict) and reply.get("status") == "success"):
+        return False
+    res = reply.get("result")
+    return not (isinstance(res, dict) and res.get("error"))
 
 
 def from_seconds(notes, foundation_path):

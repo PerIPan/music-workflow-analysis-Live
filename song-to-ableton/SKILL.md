@@ -1,6 +1,6 @@
 ---
 name: song-to-ableton
-description: Use when the user wants an existing song rebuilt, covered or reinterpreted in Ableton Live — analysis feeding a Live build, end to end. For analysis alone use song-analysis; for a take the user played, bass-transcribe.
+description: Use when the user wants an existing song rebuilt, covered or reinterpreted in Ableton Live — analysis feeding a Live build, end to end. For analysis alone use song-analysis; for a take the user played, bass-transcribe. To keep the original vocal or stems (a remix or a sketch), ableton-song-remix.
 ---
 
 # Song → Ableton (end-to-end orchestrator)
@@ -26,6 +26,7 @@ to what's needed.
 | Drive Live — tracks, clips, notes, devices, mixing; connection issues | `ableton-mcp` |
 | Arrangement craft — sections, bass/drum patterns, FX chains, dynamics | `ableton-arrangement` |
 | The user plays bass (or another mono instrument) and wants it as MIDI | `bass-transcribe` |
+| **Remix or sketch an analysed song**: the original vocal (or any stems) warped onto Live's bar grid, new drums/bass/keys on the chart's chords, or a sketch as analysed with the mix muted for A/B | `ableton-song-remix` |
 
 ## The handoff (analysis output → Ableton input)
 
@@ -42,6 +43,11 @@ to what's needed.
 **Reinterpreting in a new genre:** keep the **harmonic + rhythmic skeleton** (chords per
 bar, original drum logic, section lengths) from analysis; change instrumentation and
 energy in Ableton. Analysis says *what the song is*; the build decides *how it sounds*.
+When the original vocal (or other stems) should stay in, use `ableton-song-remix`: it
+builds the whole Session from the chart in scripts. A **sketch** (the song as analysed:
+vocal on the grid, the mix muted for A/B, the chart's chords, the transcribed bass, a drum
+part) is its `--mode sketch`. With stems on the grid, Live's tempo is the plan's tempo
+(the mean of the steady bars), not `pulse_bpm`.
 
 ## Quickstart
 

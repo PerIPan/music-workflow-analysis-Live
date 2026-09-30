@@ -37,7 +37,8 @@ a limit in the skill still applies there.
 
 0. `git clone https://github.com/jpoindexter/ableton-mcp.git` — the script is
    `AbletonMCP_Remote_Script/__init__.py`. Server and Remote Script come from this one
-   checkout, so they always match.
+   checkout, so they always match. For `ableton-song-remix`, apply
+   `remote-script-remix.patch` to the checkout now (see `remote-script-patch.md`).
 1. Locate Live's MIDI Remote Scripts folder:
    - **macOS:** right-click Ableton Live → Show Package Contents →
      `Contents/App-Resources/MIDI Remote Scripts/` — or

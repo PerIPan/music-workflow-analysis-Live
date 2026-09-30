@@ -12,6 +12,8 @@ Claude drives a live Ableton Set through the AbletonMCP server (jpoindexter fork
 - `references/setup-install.md` — first-time install (Remote Script + server + verify)
 - `references/troubleshooting.md` — connection failures, tool errors
 - `references/als-xml.md` — reading Arrangement content from the saved `.als` (MCP can't)
+- `references/remote-script-patch.md` — the local patch that adds audio-file loading and
+  working warp commands (`ableton-song-remix` needs it)
 
 For arrangement *craft* (section design, bass/drum patterns, FX chains) use the
 `ableton-arrangement` skill; this skill is the mechanics and the gotchas.
@@ -205,6 +207,16 @@ above. Standard library only; tested against a mock socket
 then read it back with `live("get_signature")` (verified on Live 12.4). It sets one global
 meter for the Set —
 the Live Object Model has no API for meter changes along the Arrangement.
+
+**Audio files and warping — patched Remote Script only** (raw TCP, no MCP tool;
+`references/remote-script-patch.md`, then restart Live): `create_audio_clip {track_index,
+clip_index, file_path}` loads a file into an empty Session slot; `set_clip_warping` (Live
+defers it — read back with `get_clip_info`); a working `add_warp_marker {beat_time,
+sample_time}` (seconds) and `move_warp_marker {beat_time, distance}`; `set_clip_warp_mode`
+with Live's real indices (`complex_pro` = 6; the stock script sends 5 = REX). These raise
+real errors. `get_capabilities` → `remix_patch: 1` tells a patched script from the stock
+one ("Unknown command") without writing anything. On the stock script never pass
+`complex_pro`, and don't call `add_warp_marker`, `create_locator` or `delete_locator`.
 
 ## Local environment (this machine)
 

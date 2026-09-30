@@ -28,6 +28,7 @@ Optional — only if you use **Ableton Live** (11/12, with the AbletonMCP server
 | `song-to-ableton` | You want a song rebuilt, covered or reinterpreted in Live — analysis feeding the build |
 | `ableton-mcp` | Driving Live over MCP: tracks, clips, notes, devices, mixing, time signature — and the gotchas |
 | `ableton-arrangement` | Arranging in Live: sections, bass and drum patterns in any meter, FX chains, dynamics |
+| `ableton-song-remix` | Remix or sketch an analysed song in Live: the original vocal warped onto Live's bar grid, new drums, bass and keys on the chart's chords, in the song's meter |
 
 ![A song (or just its name) becomes pulse, an 11/8 meter grouped 6+5, chords on the bar grid, timed lyrics, then a band chart (and, optionally, an Ableton Live clip)](docs/img/pipeline.svg)
 
@@ -94,7 +95,7 @@ git clone https://github.com/PerIPan/song-analysis.git
 cd song-analysis
 for s in song-analysis bass-transcribe; do ln -sfn "$PWD/$s" ~/.claude/skills/$s; done
 # optional, Ableton Live users only:
-for s in song-to-ableton ableton-mcp ableton-arrangement; do ln -sfn "$PWD/$s" ~/.claude/skills/$s; done
+for s in song-to-ableton ableton-mcp ableton-arrangement ableton-song-remix; do ln -sfn "$PWD/$s" ~/.claude/skills/$s; done
 ```
 
 Set up the Python environments once —
@@ -127,6 +128,16 @@ Not needed for the chart. If you use Live, `song-to-ableton` rebuilds the analys
 Live with the right tempo and time signature (chords, bass, drum logic, sections), driving
 it through the AbletonMCP server —
 [`ableton-mcp/references/setup-install.md`](ableton-mcp/references/setup-install.md).
+
+When the chart is done and Live is connected, Claude offers a **sketch** or a **remix**
+(`ableton-song-remix`): the original vocal is loaded into Live and warped with one marker
+per downbeat, so Live's bars are the song's bars at any tempo, and new drums, bass and keys
+are written on the chart's chords in the song's own meter (an 11/8 song grouped 6+5 gets a
+6+5 groove) — presets `house`, `synth-pop`, `lo-fi`, `garage-punk`, or `as-analysed` for a
+sketch with the original mix muted for A/B. Every drum part passes a drummer-playability
+check. It needs a small patch to the AbletonMCP Remote Script (audio-file loading and
+working warp markers), shipped as a `git apply` patch —
+[`ableton-mcp/references/remote-script-patch.md`](ableton-mcp/references/remote-script-patch.md).
 
 ## The pipeline
 
@@ -167,10 +178,11 @@ Run it yourself with `song-analysis/bench/run_bench.py` against your own verifie
   models; exact pins in the environment reference
 - Optional, to fetch a song by name: yt-dlp (its own venv, kept current) and deno ≥ 2.3 or node ≥ 22
 - Optional, for the Live skills only: Ableton Live 11/12 and the AbletonMCP Remote Script
+  (`ableton-song-remix`: Live 12 and the patched Remote Script)
 
 ## Tests
 
-Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 350 checks:
+Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 557 checks:
 
 ```bash
 <analysis-venv>/bin/python song-analysis/tests/test_detect_meter.py
@@ -184,6 +196,10 @@ python3 song-analysis/tests/test_chart_html.py
 python3 song-analysis/tests/test_fetch_audio.py
 <whisper-venv>/bin/python song-analysis/tests/test_whisper_artefacts.py
 python3 ableton-mcp/tests/test_push_notes.py
+python3 ableton-song-remix/tests/test_chordsym.py
+python3 ableton-song-remix/tests/test_remix_plan.py
+python3 ableton-song-remix/tests/test_remix_parts.py
+python3 ableton-song-remix/tests/test_remix_build.py
 ```
 
 ## Layout

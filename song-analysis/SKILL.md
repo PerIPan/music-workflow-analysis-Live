@@ -308,6 +308,14 @@ converts them. Read `references/chart-and-lyrics.md` first. Core invariants:
   arrangement/groove notes (entries, drops, turnarounds), and the open questions for the
   player (every call you made that the player hasn't confirmed).
 
+**What next (Live optional).** Only if the Live skills are installed and
+`mcp__ableton__health_check` answers, ask once: "The chart is done. Want a **sketch in
+Live** (the vocal on Live's grid, the chart's chords, the bass line and a drum part, the
+original mix muted for A/B) or a **remix** (keep the vocal; new drums, bass and keys on
+these chords in a style you pick), or stop here?" Both are `ableton-song-remix` (sketch =
+`--mode sketch`); they need Live 12 and the patched Remote Script
+(`ableton-mcp/references/remote-script-patch.md`). Otherwise stop at the chart.
+
 ## Benchmark
 
 `bench/run_bench.py` scores the artifacts against local ground truth (never committed):

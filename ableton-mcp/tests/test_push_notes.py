@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Test scripts/push_notes.py against a mock Remote Script (no Live needed).
 
-Checks chunking, stop-on-failure (exit 1, no false "pushed"), the out-of-bounds
-clear, set/get_signature read-back, and seconds -> Live beats with pre-roll.
+Checks chunking, stop-on-failure (exit 1, no false "pushed"; also for an error inside a
+success reply), the out-of-bounds clear, set/get_signature read-back, and seconds -> Live
+beats with pre-roll.
 Run: python3 tests/test_push_notes.py   (standard library only)
 """
 import atexit, json, os, shutil, socket, subprocess, sys, tempfile, threading
@@ -12,8 +13,9 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "push_notes.py"
 
 
 class MockLive:
-    def __init__(self, fail_on_call=None):
+    def __init__(self, fail_on_call=None, swallow_on_call=None):
         self.calls, self.sig, self.fail_on = [], (4, 4), fail_on_call
+        self.swallow_on = swallow_on_call
         self.srv = socket.socket(); self.srv.bind(("127.0.0.1", 0)); self.srv.listen(5)
         self.port = self.srv.getsockname()[1]
         threading.Thread(target=self.serve, daemon=True).start()
@@ -30,6 +32,8 @@ class MockLive:
             res = {"numerator": self.sig[0], "denominator": self.sig[1]} \
                 if msg["type"] == "get_signature" else {}
             status = "error" if len(self.calls) == self.fail_on else "success"
+            if len(self.calls) == self.swallow_on:              # error inside a success reply
+                res = {"error": "swallowed"}
             c.sendall(json.dumps({"status": status, "result": res}).encode()); c.close()
 
 
@@ -64,6 +68,10 @@ def main():
     m = MockLive(fail_on_call=2); r = run(m, 0, 1, beats)
     check("failed chunk exits 1", r.returncode == 1 and "FAILED after 300" in (r.stderr + r.stdout),
           r.stderr.strip())
+
+    m = MockLive(swallow_on_call=2); r = run(m, 0, 1, beats)
+    check("error inside a success reply exits 1", r.returncode == 1 and "FAILED after 300"
+          in (r.stderr + r.stdout), r.stderr.strip())
 
     secs, fnd = d / "secs.json", d / "found.json"
     json.dump({"beat_times": [0.5 + 0.4 * i for i in range(40)], "pulse_unit": 8,

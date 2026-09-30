@@ -41,7 +41,7 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
 | 5 Lyrics | **`scripts/whisper_gated.py`** (gated by the vocal stem; stem and mix) | `lyrics.json`, `lyrics_mix.json` |
 | 6 Sections | **`scripts/align_lyrics.py`** (canonical lyrics ↔ word times) | `lyrics_aligned.json`, `sections.json` |
 | 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`** | `chords_lv.json`, `chord_proposal.json` |
-| 8 Chart | Python → self-contained **HTML** | chart |
+| 8 Chart | **`scripts/stem_activity.py`** → **`scripts/chart_html.py`** (per-song data file) | `stem_activity.json`, self-contained **HTML** chart |
 
 `<venv>` = the analysis venv; Whisper and lv-chordia have their own
 (`references/environment-setup.md`). Below, `ST=stems/htdemucs_ft/<song>`. After any
@@ -242,18 +242,25 @@ the two disagree on the root — check those by ear with the Trap 1 tests.
 
 ## Phase 8 — Chart
 
-Read `references/chart-and-lyrics.md` before building the chart. Core invariants:
-- One row per section; parallel sections get identical row splits.
-- Chart bar = audio bar. A virtual bar only where the audio has none (e.g. a rubato hold
-  the beat tracker skipped) — and mark it.
-- Chord dict keyed by `(bar, cell)`.
+```bash
+<venv>/bin/python scripts/stem_activity.py $ST --foundation analysis/foundation.json \
+    --out analysis/stem_activity.json            # per-bar stem levels for the song map
+python3 scripts/chart_html.py gen_v1.py          # in the song folder; --out to write elsewhere
+```
+
+The chart is rendered: you write the decisions (sections, a chord per `(bar, cell)`, each
+lyric line at its anchor cell, the header, provenance and commentary) as a `SONG` dict in
+`gen_v<N>.py` (a new N per revision); `chart_html.py` reads everything measured from
+`analysis/`, so a re-run that keeps the bar grid needs only a re-render (a moved beat 1
+shifts every key). Read `references/chart-and-lyrics.md` first. Core invariants:
+- Each section starts a new row; parallel sections get identical row splits.
+- Chart bar = audio bar; the renderer adds none (a final chord may ring on the bar that
+  starts at the last downbeat).
 - **Lyric phrases anchor at the chord they resolve INTO** (Rule 1 — the big one).
-- **Show the evidence:** a header line saying where meter, grouping and mode came from
-  (`provenance`, `mode.json`), and each chord cell styled by its `status` — a "?" on
-  root disagreements and near-ties, so the player's check goes where it's needed.
-- Output: single self-contained HTML, print-friendly, containing, in order: a header
-  (tempo, meter, key/mode, each with provenance); a structure map (section → bars); the
-  chord+lyric chart; the commentary — per-section harmonic notes in scale degrees,
+- **Show the evidence:** the `provenance` line says where meter, grouping and mode came
+  from (`foundation.json` → `provenance`, `mode.json`); the renderer marks "?" where a
+  cell's own reading names another root, so the player's check goes where it's needed.
+- The commentary (`notes`): per-section harmonic notes in scale degrees,
   arrangement/groove notes (entries, drops, turnarounds), and the open questions for the
   player (every call you made that the player hasn't confirmed).
 
@@ -308,7 +315,8 @@ declaring the chart done.
 5. `basic-pitch` duplicates notes at exact octaves and invents low-register content the
    stem doesn't contain. Floor it at the instrument's range (C3 for a piano out of
    `other.wav`) before pushing anything to Ableton.
-6. Each chart correction touches ~3 places (chord dict, row layout, cascading lyrics).
+6. A chart correction is a data-file edit (chords, sections, lyric anchors) plus a
+   re-render; the renderer redoes the rows and the lyric cascade.
 7. Mirror parallel sections visually; overlay section-boundary pickups in the same cell.
 
 ## Local environment

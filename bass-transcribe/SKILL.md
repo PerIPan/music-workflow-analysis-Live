@@ -131,7 +131,7 @@ drone, where the disagreements also include harmonic locks, not just octaves.
    path (or `add_notes_to_clip` in ≤140-note chunks — never two pushes to the same clip
    in parallel).
 3. **Tab / chart** — bass tab or bar chart generation: chart craft lives in the
-   `song-analysis` skill (`references/chart-and-lyrics.md`); pitch-class per half-bar
+   `song-analysis` skill (`references/chart-and-lyrics.md`); pitch-class per `(bar, cell)`
    aggregation as in its Phase 4.
 
 ## 5. Verify before declaring done

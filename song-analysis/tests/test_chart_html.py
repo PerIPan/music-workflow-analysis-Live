@@ -1,0 +1,413 @@
+#!/usr/bin/env python3
+"""Test scripts/chart_html.py on synthetic songs (invented lyrics, temp folders, no audio).
+
+A 4/4 song checks lyric placement (pickup pulled into the anchor, no spill past the next
+anchor, unheard words a beat apart), the "?" rule, N.C., slash bass, pickup overlay, the
+split mark and HTML escaping; then the same song without words or stem levels and with
+player-verified cells, and broken words files. Small songs check lyric edge cases (a line
+sharing a pickup's or an ad-lib's cell, a line stopped at its section's end, Greek words,
+a '♪' token), chord evidence (the "?" without --compare, the split mark by coverage, odd
+labels, a stale grid). A 6+5 bar, a 3/4 bar (plus a tail bar past the last downbeat) and a
+2+2+3 bar check the grid; malformed data is refused, and the CLI renders a data file.
+Run: python3 tests/test_chart_html.py
+"""
+import contextlib, io, json, re, subprocess, sys, tempfile
+from pathlib import Path
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+from chart_html import render  # noqa: E402
+
+CELL = re.compile(r'<div class="(half[^"]*)"><div class="(chord[^"]*)">(.*?)</div>'
+                  r'<div class="(lyric[^"]*)">(.*?)</div></div>')
+PICKUP = re.compile(r'<span class="pickup[^"]*">.*?</span>')
+
+
+def make_song(grouping, bar_len, nbars, chords, evidence=None, words=None, act=None,
+              pulse_unit=4, t0=0.0):
+    """Song folder with analysis/ files. evidence: {(bar, cell): (lv, status, triad, bass[,
+    lv coverage])}, coverage 0.4 for change-inside, else 1; other chord cells get agreeing
+    readers and no bass. Evidence cells carry their start time and grouping, as upstream."""
+    d = Path(tempfile.mkdtemp(prefix="chart_html_"))
+    a = d / "analysis"
+    a.mkdir()
+    put = lambda name, obj: (a / name).write_text(json.dumps(obj), encoding="utf-8")
+    put("foundation.json", dict(downbeat_times=[t0 + bar_len * i for i in range(nbars + 1)],
+                                grouping=grouping, pulse_unit=pulse_unit))
+    ev = lambda k: (evidence or {}).get(k) or (chords.get(k, "N"), "agree", chords.get(k, "N"), {})
+    cov = lambda e: e[4] if len(e) > 4 else 0.4 if e[1] == "change-inside" else 1.0
+    keys = [(b, c) for b in range(1, nbars + 1) for c in range(1, len(grouping) + 1)]
+    start = lambda b, c: round(t0 + bar_len * (b - 1 + sum(grouping[:c - 1]) / sum(grouping)), 3)
+    put("chords_lv.json", dict(grouping=grouping, cells=[
+        dict(bar=b, cell=c, t0=start(b, c), chord=ev((b, c))[0], status=ev((b, c))[1],
+             coverage=cov(ev((b, c)))) for b, c in keys]))
+    put("chord_proposal.json", dict(grouping=grouping, cells=[
+        dict(bar=b, cell=c, t0=start(b, c), chord=ev((b, c))[2]) for b, c in keys]))
+    put("bass_per_cell.json", dict(cells=[dict(bar=b, cell=c, pc_seconds=ev((b, c))[3])
+                                          for b, c in keys]))
+    if words is not None:
+        put("words.json", dict(words=[dict(word=w, start=t, end=t + 0.2) for w, t in words]))
+    if act is not None:
+        put("stem_activity.json", act)
+    return d
+
+
+def build(S, d, name):
+    out = render(dict(S, folder=str(d)), out=d / name)
+    doc = out.read_text(encoding="utf-8")
+    return doc, CELL.findall(doc)
+
+
+def at(cells, n):
+    """{(bar, cell): (classes, chord_class, chord_html, lyric_class, lyric_html)}."""
+    return {(i // n + 1, i % n + 1): c for i, c in enumerate(cells)}
+
+
+def lyric(cell):
+    return PICKUP.sub("", cell[4])
+
+
+# ---------------------------------------------------------------- the 4/4 song
+CHORDS = {(1, 1): "N.C.", (1, 2): "N.C.", (2, 1): "C", (2, 2): "C", (3, 1): "C", (3, 2): "Em/D",
+          (4, 1): "C", (4, 2): "C", (5, 1): "F#m7", (5, 2): "Bb", (6, 1): "G", (6, 2): "G",
+          (7, 1): "D", (7, 2): "D", (8, 1): "N.C.", (8, 2): "N.C."}
+EVIDENCE = {
+    (2, 1): ("A:min", "root-disagree", "C", {"C": 0.8}),      # lv-chordia names A -> ?
+    (2, 2): ("C:maj7", "root-disagree", "Am", {"C": 0.8}),    # triads only, bass plays C
+    (3, 1): ("C:maj", "root-disagree", "Am", {"A": 0.8}),     # triads + bass on A -> ?
+    (3, 2): ("E:min/b7", "root-disagree", "D", {"D": 0.9}),   # bass = the slash note
+    (4, 1): ("C:maj", "near-tie", "C", {"C": 0.5}),           # a near-tie alone
+    (4, 2): ("C:maj", "root-disagree", "Am", {"A": 0.1}),     # bass note too short to count
+    (6, 1): ("G:maj", "change-inside", "G", {}),              # split mark
+    (8, 1): ("C:maj", "agree", "C", {}),                      # N.C. is never marked
+}
+LYRICS = {
+    (2, 1): ('Rock & roll <now> "go"', "adlib"),
+    (3, 1): ("Hello there my friend", ""),
+    (4, 1): ("Stay close and never ever leave", ""),
+    (5, 1): ("Next line begins", ""),
+    (6, 1): ("Quiet words nobody heard clearly", ""),
+    (7, 2): ("Oh now", "pk pk-bridge"),
+    (8, 1): ("(hey hey)", "adlib"),
+}
+# bar b = [1 + 2(b-1), 1 + 2b) s, cells of 1 s, beats of 0.5 s. "Hello" is sung in bar 2,
+# "ever" after the next line's anchor (bar 5), "leave" and the bar-6 line are never heard.
+WORDS = [("Hello", 4.6), ("there", 5.1), ("my", 5.4), ("friend", 6.2), ("Stay", 7.0),
+         ("close", 7.4), ("and", 8.1), ("never", 8.5), ("ever", 9.1), ("Next", 9.2),
+         ("line", 9.6), ("begins", 10.3)]
+ACT = {s: [0.1 * i for i in range(8)] for s in ("drums", "bass", "other", "vocals")}
+SONG = dict(title="Test Song", artist="Tom & Jerry <Band>", key_short="C major",
+            words="words.json", chords=CHORDS, lyrics=LYRICS, bass_notes={(5, 2): "A"},
+            sections=[('Intro & "more"', 1, 1, "intro", "count-in <b>two</b>", "N.C."),
+                      ("Verse", 2, 5, "verse", "first verse", "C · Em/D"),
+                      ("Bridge", 6, 8, "bridge", "lift", "G · D")],
+            facts=[("Tempo", "120 BPM")], map_note="levels",
+            notes=[("Idea", "<p>one loop</p>"), ("Open", "<ol><li>beat 1?</li></ol>", "open")],
+            method="<p>{cells}|{lv_pct}|{tri_pct}|{n_q}</p>")
+
+
+def main():
+    fails = 0
+
+    def check(name, cond, info=""):
+        nonlocal fails
+        fails += not cond
+        print(f"{'PASS' if cond else 'FAIL'}  {name}" + ("" if cond else f"  [{info}]"))
+
+    d = make_song([2, 2], 2.0, 8, CHORDS, EVIDENCE, WORDS, ACT, t0=1.0)
+    doc, cells = build(SONG, d, "main.html")
+    C = at(cells, 2)
+    L = {k: lyric(v) for k, v in C.items()}
+    check("16 cells, one per half-bar", len(cells) == 16, len(cells))
+    check("pickup word sung in bar 2 pulled into the anchor",
+          L[(3, 1)] == "Hello there my" and L[(2, 2)] == "", (L[(2, 2)], L[(3, 1)]))
+    check("line split where it is sung", L[(3, 2)] == "friend", L[(3, 2)])
+    check("nothing spills past the next anchor",
+          L[(4, 1)] == "Stay close" and L[(4, 2)] == "and never ever leave"
+          and L[(5, 1)] == "Next line" and L[(5, 2)] == "begins",
+          [L[k] for k in ((4, 1), (4, 2), (5, 1), (5, 2))])
+    check("unheard words a beat apart", [L[k] for k in ((6, 1), (6, 2), (7, 1))] ==
+          ["Quiet words", "nobody heard", "clearly"], [L[k] for k in ((6, 1), (6, 2), (7, 1))])
+    q = {k for k, v in C.items() if "q" in v[0].split()}
+    check("? where lv-chordia names another root", (2, 1) in q, q)
+    check("no ? for a triad-only objection the bass contradicts", (2, 2) not in q, q)
+    check("? for triad objection + a bass note against the chart", (3, 1) in q, q)
+    check("no ? when the bass plays the slash note", (3, 2) not in q, q)
+    check("no ? for a near-tie or a bass note under 0.15 s",
+          (4, 1) not in q and (4, 2) not in q, q)
+    check("N.C. never marked, exactly 2 ?", q == {(2, 1), (3, 1)}, q)
+    check("N.C. cells", C[(1, 1)][1:3] == ("chord rest", "N.C.") and
+          C[(8, 2)][1:3] == ("chord rest", "N.C."), C[(1, 1)])
+    check("slash chord -> Em (D)", C[(3, 2)][2] == 'Em<span class="bass">(D)</span>', C[(3, 2)][2])
+    check("bass_notes + flat -> B♭ (A); sharp -> F♯m7",
+          C[(5, 2)][2] == 'B♭<span class="bass">(A)</span>' and C[(5, 1)][2] == "F♯m7",
+          (C[(5, 1)][2], C[(5, 2)][2]))
+    check("pickup overlay in its cell, in the bridge colour",
+          '<span class="pickup pk-bridge">Oh now</span>' in C[(7, 2)][4]
+          and ".lyric .pickup.pk-bridge{color:#5b9a52}" in doc, C[(7, 2)][4])
+    check("ad-lib whole and greyed", C[(8, 1)][3:] == ("lyric adlib", "(hey hey)"), C[(8, 1)])
+    check("change-inside -> dashed underline + legend", "split" in C[(6, 1)][0].split()
+          and ".half.split .chord{text-decoration:underline dashed" in doc
+          and "Dashed underline = the chord changes" in doc, C[(6, 1)][0])
+    check("escaped: title, lyric, section name",
+          "<h1>Tom &amp; Jerry &lt;Band&gt; — Test Song · C major</h1>" in doc
+          and C[(2, 1)][4] == "Rock &amp; roll &lt;now&gt; &quot;go&quot;"
+          and "Intro &amp; &quot;more&quot;</span>" in doc, C[(2, 1)][4])
+    check("html fields kept as html", "count-in <b>two</b>" in doc
+          and '<div class="note-block open"><h3>Open</h3><ol>' in doc)
+    check("bar-end on cell 2 only", all(("bar-end" in v[0].split()) == (k[1] == 2)
+                                        for k, v in C.items()))
+    check("4/4 legend wording", "Each bar = 2 half-cells (beats 1–2 / beats 3–4); a thick line "
+          "ends the bar." in doc and "this half-bar's own reading" in doc)
+    check("short rows keep cell width (1 bar, 3 bars)",
+          '<span class="row-meta">bar 1</span>' in doc and doc.count('class="bars cols-2"') == 1
+          and doc.count('class="bars cols-6"') == 1
+          and ".bars.cols-6{grid-template-columns:repeat(6,1fr);max-width:75%}" in doc)
+    check("2-cell shading", ".half:nth-child(4n+1),.half:nth-child(4n+2){background:#fbfbf8}"
+          in doc)
+    check("song map: harmony + 4 stem meters", "<th>Harmony</th><th>Vocal</th><th>Bass</th>"
+          "<th>Drums</th><th>Keys/gtr</th>" in doc and "<td>C · Em/D</td>" in doc)
+    check("method placeholders", "<p>12|92|67|2</p>" in doc,
+          re.search(r"Method &amp; confidence</h3>(.*?)</div>", doc).group(1))
+
+    (d / "analysis" / "stem_activity.json").unlink()
+    S = {k: v for k, v in SONG.items() if k != "words"}
+    doc, cells = build(S, d, "bare.html")
+    L = {k: lyric(v) for k, v in at(cells, 2).items()}
+    check("no words file: lines whole at their anchor",
+          L[(3, 1)] == "Hello there my friend" and L[(4, 1)] == "Stay close and never ever leave"
+          and L[(3, 2)] == "" and "Each lyric line sits at the chord" in doc,
+          (L[(3, 1)], L[(4, 1)]))
+    check("no stem_activity.json: map without meters",
+          "<th>Vocal</th>" not in doc and 'class="track"' not in doc and "<th>Harmony</th>" in doc)
+    doc, cells = build(dict(S, verified=[(2, 1), (6, 1)]), d, "verified.html")
+    C = at(cells, 2)
+    check("player-verified cells lose their ? and split mark",
+          {k for k, v in C.items() if "q" in v[0].split()} == {(3, 1)}
+          and "split" not in C[(6, 1)][0].split() and ".half.split" not in doc)
+
+    wf = d / "analysis" / "words.json"
+    wf.write_text('{"words": []}', encoding="utf-8")
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        doc, cells = build(SONG, d, "nowords.html")
+    L = {k: lyric(v) for k, v in at(cells, 2).items()}
+    check("empty words list: lines whole at their anchor, anchor legend, a warning",
+          L[(4, 1)] == "Stay close and never ever leave" and L[(4, 2)] == ""
+          and "Each lyric line sits at the chord" in doc and "has no words" in err.getvalue(),
+          (L[(4, 1)], err.getvalue()))
+    for name, raw in (("0-byte words file", ""), ("words file without a words list", "{}")):
+        wf.write_text(raw, encoding="utf-8")
+        try:
+            build(SONG, d, "bad.html")
+            check(f"{name} refused, naming the file", False, "rendered")
+        except ValueError as e:
+            check(f"{name} refused, naming the file", "words.json" in str(e), e)
+
+    # ------------------------------------------------------------ lyric placement edge cases
+    def placed(grouping, bar_len, nbars, sections, lyrics, words, name):
+        """The page of a one-chord song, and {(bar, cell): lyric html} of its non-empty cells."""
+        n, last = len(grouping), sections[-1][2]
+        ch = {(b, c): "C" for b in range(1, last + 1) for c in range(1, n + 1)}
+        d = make_song(grouping, bar_len, nbars, ch, words=words)
+        doc, cells = build(dict(title="Lyric", artist="Nobody", words="words.json", chords=ch,
+                                sections=sections, lyrics=lyrics), d, name)
+        return doc, {k: v[4] for k, v in at(cells, n).items() if v[4]}
+
+    _, P = placed([3], 1.5, 5, [("Verse", 1, 3, "verse", ""), ("Chorus", 4, 5, "chorus", "")],
+                  {(2, 1): ("copper kettles humming low", ""), (3, 1): ("Oh now", "pk pk-chorus"),
+                   (4, 1): ("tin roofs", "")},
+                  [("copper", 1.6), ("kettles", 2.0), ("humming", 2.5), ("low", 3.2),
+                   ("Oh", 3.8), ("now", 4.1), ("tin", 4.6), ("roofs", 5.0)], "pickup.html")
+    check("Rule 4: a line's last word shares the pickup's cell (3/4)",
+          P == {(2, 1): "copper kettles humming",
+                (3, 1): 'low<span class="pickup pk-chorus">Oh now</span>', (4, 1): "tin roofs"}, P)
+    doc, P = placed([2, 2], 2.0, 5, [("Verse", 1, 5, "verse", "")],
+                    {(2, 1): ("seven lanterns drift across the quiet bay", ""),
+                     (2, 2): ("(ooh)", "adlib"), (5, 1): ("ferry bells", "")},
+                    [("seven", 2.1), ("lanterns", 2.6), ("drift", 3.1), ("across", 4.2),
+                     ("the", 4.6), ("quiet", 5.2), ("bay", 5.6), ("ferry", 8.1), ("bells", 8.4)],
+                    "adlib.html")
+    check("an ad-lib shares its cell with the lead line, which goes on past it",
+          P == {(2, 1): "seven lanterns", (2, 2): 'drift<span class="adlib">(ooh)</span>',
+                (3, 1): "across the", (3, 2): "quiet bay", (5, 1): "ferry bells"}
+          and ".lyric .adlib{color:#aaa" in doc, P)
+    _, P = placed([2, 2], 2.0, 6, [("Verse", 1, 2, "verse", ""), ("Inter", 3, 4, "inst", ""),
+                                   ("Chorus", 5, 6, "chorus", "")],
+                  {(2, 1): ("one two three four five six", ""), (5, 1): ("shine", "")},
+                  [("one", 2.0), ("two", 2.5), ("three", 3.0), ("shine", 8.1)], "section.html")
+    check("unheard words stop at the line's section end, not in the next section",
+          P == {(2, 1): "one two", (2, 2): "three four five six", (5, 1): "shine"}, P)
+    line = "amber rain falls on quiet wooden roofs"
+    _, P = placed([3], 1.0, 10, [("Outro", 1, 8, "outro", "")], {(3, 1): (line, "")},
+                  [(w, 2.1 + i) for i, w in enumerate(line.split())], "last.html")
+    check("the last line runs to its section's last bar (no 4-bar cap, no unrendered bar)",
+          P == {(3, 1): "amber", (4, 1): "rain", (5, 1): "falls", (6, 1): "on",
+                (7, 1): "quiet", (8, 1): "wooden roofs"}, P)
+    _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
+                  {(2, 1): ("ένα δύο τρία τέσσερα", ""), (3, 1): ("πέντε έξι επτά", "")},
+                  list(zip("ένα δύο τρία τέσσερα πέντε έξι επτά".split(),
+                           (2.1, 2.5, 3.2, 3.6, 4.1, 5.2, 5.6))), "greek.html")
+    check("Greek words matched: each line split where sung",
+          P == {(2, 1): "ένα δύο", (2, 2): "τρία τέσσερα", (3, 1): "πέντε", (3, 2): "έξι επτά"},
+          P)
+    _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
+                  {(2, 1): ("paper boats — ohhh", ""), (3, 1): ("harbour", "")},
+                  [("paper", 2.1), ("boats", 2.4), ("ohhh", 2.8), ("♪", 3.6), ("harbour", 4.1)],
+                  "punct.html")
+    check("a '♪' token or a dash is no word", P == {(2, 1): "paper boats — ohhh",
+                                                  (3, 1): "harbour"}, P)
+
+    # ------------------------------------------------------------ chord evidence and labels
+    ch = {(b, c): "A" for b in range(1, 5) for c in (1, 2)}
+    ch.update({(3, 1): "C6/9", (3, 2): "C#/E#", (4, 1): "F#m7b5", (4, 2): "Gb/Cb"})
+    ev = {(1, 1): ("N", "agree", "F#m", {"F#": 0.9}),                # lv-chordia hears no chord
+          (1, 2): ("A:maj", "unchecked", "F#m", {"F#": 0.9}),        # run without --compare
+          (2, 1): ("A:maj", "root-disagree", "D", {"A": 0.9}, 0.4)}  # change inside, relabelled
+    d = make_song([2, 2], 2.0, 4, ch, ev)
+    S = dict(title="Evidence", artist="Nobody", chords=ch, sections=[("Verse", 1, 4, "verse", "")])
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        doc, cells = build(S, d, "evidence.html")
+    C = at(cells, 2)
+    q = {k for k, v in C.items() if "q" in v[0].split()}
+    check("? from triads + bass where lv-chordia hears N or ran without --compare",
+          q == {(1, 1), (1, 2)}, q)
+    sp = {k for k, v in C.items() if "split" in v[0].split()}
+    check("split mark from lv coverage under half, whatever the status", sp == {(2, 1)}, sp)
+    lab = [C[k][2] for k in ((3, 1), (3, 2), (4, 1), (4, 2))]
+    check("labels: 6/9 is no slash chord; E♯ and C♭ bass; m7♭5",
+          lab == ["C6/9", 'C♯<span class="bass">(E♯)</span>', "F♯m7♭5",
+                  'G♭<span class="bass">(C♭)</span>'], lab)
+    check("evidence made on this grid: no warning", err.getvalue() == "", err.getvalue())
+    F = json.loads((d / "analysis" / "foundation.json").read_text(encoding="utf-8"))
+    F["downbeat_times"] = [t + 1.0 for t in F["downbeat_times"]]     # beat 1 moved half a bar
+    (d / "analysis" / "foundation.json").write_text(json.dumps(F), encoding="utf-8")
+    with contextlib.redirect_stderr(err):
+        build(S, d, "stale.html")
+    check("evidence from another grid: warning", "chords_lv.json was made on another grid"
+          in err.getvalue() and "chord_proposal.json" in err.getvalue(), err.getvalue())
+
+    # ------------------------------------------------------------ 11/8 as 6+5
+    ch = {(b, c): "Am" for b in range(1, 6) for c in (1, 2)}
+    d = make_song([6, 5], 2.2, 5, ch, words=[("Cold", 0.1), ("winds", 1.15), ("carry", 1.3),
+                                             ("one", 4.5)], pulse_unit=8)
+    S = dict(title="Odd", artist="Nobody", words="words.json", chords=ch,
+             sections=[("Verse", 1, 5, "verse", "")],
+             lyrics={(1, 1): ("Cold winds carry", ""),
+                     (3, 1): ("one two three four five six seven eight", "")})
+    doc, cells = build(S, d, "odd.html")
+    C = at(cells, 2)
+    L = {k: lyric(v) for k, v in C.items()}
+    check("6+5: 2 cells per bar, bar-end on the 5", len(cells) == 10 and all(
+        ("bar-end" in v[0].split()) == (k[1] == 2) for k, v in C.items()), len(cells))
+    check("6+5: columns to scale, short row too",
+          ".bars{display:grid;grid-template-columns:repeat(4,6fr 5fr);" in doc
+          and ".bars.cols-2{grid-template-columns:repeat(1,6fr 5fr);max-width:25%}" in doc
+          and doc.count('class="bars cols-2"') == 1)
+    check("6+5: split at 6/11 of the bar, not the middle",
+          L[(1, 1)] == "Cold winds" and L[(1, 2)] == "carry", (L[(1, 1)], L[(1, 2)]))
+    check("6+5: unheard words an eighth (bar / 11) apart",
+          L[(3, 1)] == "one two three four five six" and L[(3, 2)] == "seven eight",
+          (L[(3, 1)], L[(3, 2)]))
+    check("6+5 legend", "Each bar = 2 cells (eighths 1–6 / eighths 7–11, widths to scale)" in doc
+          and "this cell's own reading" in doc)
+    check("no harmony given: no Harmony column", "<th>Harmony</th>" not in doc)
+
+    # ------------------------------------------------------------ 3/4, one cell per bar
+    ch = {(b, 1): "G" for b in range(1, 12)}
+    d = make_song([3], 1.5, 10, {k: v for k, v in ch.items() if k[0] <= 10},
+                  words=[("Waltz", 1.5), ("along", 2.0), ("the", 2.6), ("river", 3.1),
+                         ("bend", 3.8), ("Goodbye", 15.1), ("now", 15.6)])
+    S = dict(title="Waltz", artist="Nobody", words="words.json", chords=ch,
+             sections=[("Verse", 1, 10, "verse", ""), ("Outro", 11, 11, "outro", "ring out")],
+             lyrics={(2, 1): ("Waltz along the river bend", ""), (11, 1): ("Goodbye now", "")})
+    doc, cells = build(S, d, "waltz.html")
+    C = at(cells, 1)
+    L = {k: lyric(v) for k, v in C.items()}
+    check("3/4: one cell per bar, every cell ends a bar", len(cells) == 11 and all(
+        "bar-end" in v[0].split() for v in C.values()), len(cells))
+    check("3/4: 8 bars a row, shorter rows at the same width",
+          ".bars{display:grid;grid-template-columns:repeat(8,1fr);" in doc
+          and ".bars.cols-2{grid-template-columns:repeat(2,1fr);max-width:25%}" in doc
+          and ".bars.cols-1{grid-template-columns:repeat(1,1fr);max-width:12.5%}" in doc
+          and doc.count('class="bars cols-2"') == 1 and doc.count('class="bars cols-1"') == 1)
+    check("1-cell shading", ".half:nth-child(2n+1){background:#fbfbf8}" in doc)
+    check("3/4: words by bar", L[(2, 1)] == "Waltz along the" and L[(3, 1)] == "river bend",
+          (L[(2, 1)], L[(3, 1)]))
+    check("tail bar past the last downbeat (no duration_s)", L[(11, 1)] == "Goodbye now",
+          L[(11, 1)])
+    check("3/4 legend", "Each bar = 1 cell (beats 1–3); a thick line ends the bar." in doc)
+    check("default method text: % of the cells each reader read (the tail bar has none)",
+          "Of 11 chord cells, lv-chordia names the chart's root in 100% and the triad reader "
+          "in 100% (of the cells each read); cells marked <b>?</b>: 0." in doc)
+
+    # ------------------------------------------------------------ 7/8 as 2+2+3
+    ch = {(b, c): "E" for b in range(1, 7) for c in (1, 2, 3)}
+    d = make_song([2, 2, 3], 1.75, 6, ch, pulse_unit=8)
+    S = dict(title="Seven", artist="Nobody", chords=ch, sections=[("Verse", 1, 6, "verse", "")])
+    doc, cells = build(S, d, "seven.html")
+    check("3-cell shading, 2 bars a row", len(cells) == 18
+          and ".half:nth-child(6n+1),.half:nth-child(6n+2),.half:nth-child(6n+3)"
+              "{background:#fbfbf8}" in doc
+          and ".bars{display:grid;grid-template-columns:repeat(2,2fr 2fr 3fr);" in doc)
+    doc, _ = build(dict(S, bars_per_row=3), d, "seven3.html")
+    check("bars_per_row override", ".bars{display:grid;grid-template-columns:repeat(3,2fr 2fr "
+          "3fr);" in doc and "max-width:33.333%}" in doc and "max-width:66.667%}" in doc)
+    check("2+2+3 legend", "Each bar = 3 cells (eighths 1–2 / eighths 3–4 / eighths 5–7, widths "
+          "to scale)" in doc)
+    sec = lambda *spans: [(f"S{i}", b0, b1, "verse", "") for i, (b0, b1) in enumerate(spans)]
+    for name, bad in (("chord off the grid refused", dict(S, chords={**ch, (7, 1): "E"})),
+                      ("old map_harmony refused", dict(S, map_harmony={"Verse1": "E"})),
+                      ("section gap refused", dict(S, sections=sec((1, 2), (4, 6)))),
+                      ("section overlap refused", dict(S, sections=sec((1, 3), (3, 6)))),
+                      ("sections out of order refused", dict(S, sections=sec((4, 6), (1, 3)))),
+                      ("section from bar 0 refused", dict(S, sections=sec((0, 6)))),
+                      ("chords past the last section refused", dict(S, sections=sec((1, 5)))),
+                      ("section without its note refused",
+                       dict(S, sections=[("Verse", 1, 6, "verse")])),
+                      ("unknown section kind refused",
+                       dict(S, sections=[("Pre", 1, 6, "pre", "")])),
+                      ("notes as a dict refused", dict(S, notes={"Verse": "<p>x</p>"})),
+                      ("lyric not a (text, kind) tuple refused", dict(S, lyrics={(2, 1): "Oh"})),
+                      ("chords keyed by bar alone refused", dict(S, chords={1: "E"})),
+                      ("Harte chord label refused", dict(S, chords={**ch, (1, 1): "E:maj"})),
+                      ("a single brace in method refused", dict(S, method="<p>{see notes}</p>")),
+                      ("unknown SONG key refused", dict(S, lyric={(2, 1): ("Oh", "")}))):
+        try:
+            build(bad, d, "bad.html")
+            check(name, False, "rendered")
+        except ValueError as e:
+            check(name, True, e)
+
+    # ------------------------------------------------------------ CLI
+    d = make_song([2, 2], 2.0, 8, CHORDS, EVIDENCE, t0=1.0)
+    (d / "gen_v1.py").write_text(
+        "SONG = dict(title='Cli Song', artist='Nobody', chords={(1, 1): 'C', (2, 2): 'G'},\n"
+        "            sections=[('Verse', 1, 2, 'verse', '')])\n", encoding="utf-8")
+    (d / "old.py").write_text("SONG = dict(title='x', artist='y', chords={}, map_harmony={},\n"
+                              "            sections=[('Verse', 1, 2, 'verse', '')])\n",
+                              encoding="utf-8")
+    cwd = Path(tempfile.mkdtemp(prefix="chart_html_cwd_"))
+    run = lambda *args: subprocess.run([sys.executable, str(SCRIPTS / "chart_html.py"), *args],
+                                       capture_output=True, text=True, cwd=cwd)
+    r = run(str(d / "gen_v1.py"))
+    check("CLI: default output next to the data file", r.returncode == 0
+          and (d / "Nobody - Cli Song - Chords.html").exists(), r.stderr or r.stdout)
+    r = run(str(d / "gen_v1.py"), "--out", "x.html")
+    check("CLI: --out", r.returncode == 0 and (cwd / "x.html").exists(), r.stderr)
+    check("CLI: no __pycache__ left in the song folder", not (d / "__pycache__").exists())
+    r = run(str(d / "old.py"))
+    check("CLI: bad data exits 1 with the reason", r.returncode == 1
+          and "map_harmony" in r.stderr, r.stderr)
+    (d / "slash.py").write_text(
+        "SONG = dict(title='Up/Down', artist='Left/Right', chords={(1, 1): 'C'},\n"
+        "            sections=[('Verse', 1, 2, 'verse', '')])\n", encoding="utf-8")
+    r = run(str(d / "slash.py"))
+    check("CLI: a / in artist or title becomes - in the default file name", r.returncode == 0
+          and (d / "Left-Right - Up-Down - Chords.html").exists(), r.stderr or r.stdout)
+    sys.exit(1 if fails else 0)
+
+
+if __name__ == "__main__":
+    main()

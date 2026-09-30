@@ -34,8 +34,8 @@ with tests.
   the characteristic degrees (♯4 for Lydian, ♭7 for Mixolydian, ♭2 for Phrygian…). A degree
   that never sounds is reported as undetermined, not filled in.
 - **It shows its uncertainty.** The chart says where the meter and mode came from and marks
-  every chord cell where the two chord readers disagree, so your listening pass goes where
-  it's needed.
+  each chord cell whose own evidence names another root (lv-chordia, or the triad
+  cross-check backed by the bass), so your listening pass goes where it's needed.
 - **It's benchmarked, failures included.** A local benchmark scores every step against
   player-verified answers; the docs record what didn't work, with numbers.
 
@@ -101,7 +101,7 @@ For the Live skills you also need the AbletonMCP server —
 | 5 Lyrics | `whisper_gated.py` | word timings (Whisper, gated by the vocal stem) |
 | 6 Sections | `align_lyrics.py` | your lyrics with times, sections on the bar grid |
 | 7 Chords | `lv_chords.py` + `chord_proposal.py` | chords with 7ths/inversions, cross-checked per cell |
-| 8 Chart | (Claude writes it) | self-contained HTML chord+lyric chart |
+| 8 Chart | `stem_activity.py` → `chart_html.py` (renders a per-song data file Claude writes) | self-contained HTML chart: chords + lyrics, song map, commentary |
 
 `validate_artifacts.py` checks the hand-offs between phases;
 `ableton-mcp/scripts/push_notes.py` pushes notes into Live over its TCP socket.
@@ -130,14 +130,17 @@ Run it yourself with `song-analysis/bench/run_bench.py` against your own verifie
 
 ## Tests
 
-Offline, on synthetic audio or a mock Live socket — 40 checks:
+Offline, on synthetic audio or a mock Live socket — 135 checks:
 
 ```bash
 <analysis-venv>/bin/python song-analysis/tests/test_detect_meter.py
 <analysis-venv>/bin/python song-analysis/tests/test_chord_proposal.py
 <analysis-venv>/bin/python song-analysis/tests/test_mode_test.py
+<analysis-venv>/bin/python song-analysis/tests/test_downbeat_check.py
+<analysis-venv>/bin/python song-analysis/tests/test_stem_activity.py
 python3 song-analysis/tests/test_foundation.py
 python3 song-analysis/tests/test_align_lyrics.py
+python3 song-analysis/tests/test_chart_html.py
 python3 ableton-mcp/tests/test_push_notes.py
 ```
 

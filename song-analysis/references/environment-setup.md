@@ -69,10 +69,10 @@ Notes:
 - **mlx-demucs** (optional batch path) runs **plain htdemucs** (not `_ft`) ~9× faster than
   torch-CPU demucs; for `_ft`, use torch demucs on MPS instead.
 - Tests (offline, synthetic): in `song-analysis/`, `.venv-bp/bin/python` runs
-  `tests/test_detect_meter.py`, `test_chord_proposal.py`, `test_mode_test.py` and
-  `test_downbeat_check.py`;
-  `python3` runs `tests/test_foundation.py` and `test_align_lyrics.py`; in `ableton-mcp/`,
-  `python3 tests/test_push_notes.py`.
+  `tests/test_detect_meter.py`, `test_chord_proposal.py`, `test_mode_test.py`,
+  `test_downbeat_check.py` and `test_stem_activity.py`;
+  `python3` runs `tests/test_foundation.py`, `test_align_lyrics.py` and
+  `test_chart_html.py`; in `ableton-mcp/`, `python3 tests/test_push_notes.py`.
 
 ## Per-song working directory
 
@@ -89,16 +89,19 @@ Created fresh for each song:
 │   ├── bass.mid, bass_notes.json       # bass_notes.py (pyin)
 │   ├── bass_per_cell.json              # seconds per pitch class per (bar, cell)
 │   ├── mode.json                       # mode_test.py — tonic, mode, per-section
-│   ├── lyrics.json                     # whisper_gated.py words
+│   ├── lyrics.json, lyrics_mix.json    # whisper_gated.py words (vocal stem, full mix)
 │   ├── lyrics_aligned.json             # align_lyrics.py — canonical lines with times
 │   ├── sections.json                   # align_lyrics.py — section starts, (bar, cell)
 │   ├── chords_lv.json                  # lv_chords.py — primary chord reading
-│   └── chord_proposal.json             # chord_proposal.py — triad cross-check
+│   ├── chord_proposal.json             # chord_proposal.py — triad cross-check
+│   └── stem_activity.json              # stem_activity.py — per-bar stem levels (song map)
 ├── stems/htdemucs_ft/<song>/           # {bass,drums,vocals,other}.wav
-└── gen_v<N>.py                         # chart generator (iterate)
+├── gen_v<N>.py                         # chart data (SONG) for scripts/chart_html.py
+└── <artist> - <title> - Chords.html    # chart_html.py output
 ```
 
-Final chart HTML can be written anywhere convenient (e.g. a shared cloud-storage folder).
+The chart lands beside its data file; `--out` writes it anywhere else (e.g. a shared
+cloud-storage folder).
 
 ## This machine
 
@@ -115,5 +118,7 @@ The one place for local paths — every skill in this repo points here.
 | Trial venvs kept for re-runs | `.venv-asseg` (sections), `.venv-swiftf0`, `.venv-sep047` (+ `models-audio-separator/`) |
 
 Song folders live in `~/dev/abletonAI/`. Older helpers in the tooling root
-(`analyze_chords.py`, `scripts/transcribe_bass_pyin.py`, `gen_*.py`) predate these skills'
-scripts — `analyze_chords.py` still has a 0.05 major bias; prefer `scripts/`.
+(`analyze_chords.py`, `scripts/transcribe_bass_pyin.py`, the old chart and note
+generators `gen_*.py`) predate these skills' scripts — `analyze_chords.py` still has a
+0.05 major bias; prefer `scripts/`. A song folder's `gen_v<N>.py` is not one of them: it
+is chart data for `chart_html.py`.

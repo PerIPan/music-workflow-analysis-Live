@@ -32,7 +32,7 @@ to what's needed.
 | Analysis output | Use in Ableton |
 |---|---|
 | `pulse_bpm`, `pulse_unit`, `beats_per_bar`, `num_bars` | `set_tempo(pulse_bpm × 4 / pulse_unit)` — Live's tempo counts quarter notes. One bar = `beats_per_bar × 4 / pulse_unit` Live beats (4/4 → 4, 7/8 → 3.5, 11/8 → 5.5); size clips in whole bars |
-| `chord_proposal` per `(bar, cell)` | chord clips on a synth/keys track, or a chart for a live band |
+| `chords_lv` (checked by `chord_proposal`) per `(bar, cell)` | chord clips on a synth/keys track; the band chart is `song-analysis` Phase 8 (`chart_html.py`) |
 | `bar_bpm`, `tempo_drift_pct` | above ~±3% drift, place notes through the beat grid, not one BPM (`ableton-mcp` → "Timing") |
 | bass MIDI (root line) | reference clip — or **leave the bass slot empty** for a live bassist |
 | drum-pattern read | match the original's kick/snare logic (or `generate_drum_pattern`); never impose a rock backbeat on a non-rock song |

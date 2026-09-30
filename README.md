@@ -4,11 +4,13 @@
 including the odd meters, modes and drones that other analysis tools flatten into 4/4
 major/minor. No DAW needed; Ableton Live is an optional extra.**
 
-**Just name a song** — "analyze *Talk It Over* by Leon Bridges" — and Claude finds the
-recording, checks the pick with you, and analyzes it. Or hand it an mp3 and the lyrics. It
-finds the pulse, sweeps for the meter, separates stems, transcribes the bass, names the
-mode, reads the chords, times the lyrics, and writes a chart a band can play from. The
-analysis runs offline on an Apple Silicon Mac, and every step is a script with tests.
+- **Just name a song** — "analyze *Talk It Over* by Leon Bridges" — and Claude finds the
+  recording, checks the pick with you, and analyzes it.
+- **Or hand it an mp3** and the lyrics.
+- It finds the pulse, sweeps for the meter, separates stems, transcribes the bass, names
+  the mode, reads the chords and times the lyrics.
+- It writes a **chart a band can play from**: chords, lyrics, song map and commentary.
+- Runs offline on an Apple Silicon Mac; every step is a script with tests.
 
 ## The skills
 

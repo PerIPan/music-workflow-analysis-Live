@@ -7,7 +7,7 @@ missing stems are left out and an empty folder is an error. A vocal heard in 1 b
 and a bleed-only stem read low where they are absent; bars past the end of the audio read 0.
 Run with the analysis venv: <venv>/bin/python tests/test_stem_activity.py
 """
-import json, math, subprocess, sys, tempfile
+import atexit, json, math, shutil, subprocess, sys, tempfile
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -31,6 +31,7 @@ def main():
         print(f"{'PASS' if cond else 'FAIL'}  {name}" + ("" if cond else f"  [{info}]"))
 
     d = Path(tempfile.mkdtemp(prefix="stem_activity_"))
+    atexit.register(shutil.rmtree, d, True)            # removed at exit
     stems = d / "stems"
     stems.mkdir()
     sf.write(stems / "drums.wav", tone([0.8] * 10 + [0.4] * 5 + [0.0] * 5), SR)

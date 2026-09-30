@@ -22,8 +22,8 @@ not in an extra bar.
 ### Cells per bar
 
 One cell per metric group of the bar — the `grouping` in `foundation.json`. In 4/4 that is
-two half-bars (h1 = beats 1–2, h2 = beats 3–4); an 11/8 bar split 6+5 has two unequal
-cells; a 3/4 bar has one. The half-cell wording below is the 4/4 case. Each cell shows:
+two half-bars (beats 1–2 and 3–4); an 11/8 bar split 6+5 has two unequal cells; a 3/4
+bar has one. The half-cell wording below is the 4/4 case. Each cell shows:
 - **Chord** (large) — guitar/piano shape
 - **(bass note)** in small blue parens — only if bass differs from chord root (slash-chord notation)
 - **Lyric** (small italic) — words sung in this cell
@@ -36,7 +36,16 @@ see "Bass walks" below).
 A full row holds as many whole bars as fit in 8 cells (`bars_per_row`, default
 `max(1, 8 // cells per bar)`: 4 bars of 4/4, 8 of 3/4, 2 of a three-cell bar). A shorter
 last row keeps the same cell width instead of stretching, and unequal groups get
-proportional columns (6+5 → 6:5).
+proportional columns (6+5 → 6:5). Columns keep that share whatever the labels: a label too
+wide for its cell (a phone, print, a long `C♯m7♭5/G♯` in a 5-eighth cell) shrinks to fit,
+keeping clear of the "?" mark, instead of widening its column and pushing the bar lines.
+A slash chord's bass note shrinks with its chord only down to .6rem (then to three
+quarters of the chord's size in a very narrow cell), so it stays readable. Sharps and
+flats are set in a symbol font, since Georgia has no ♭ (`B♭`, not `B ♭`). Without Georgia
+the chord falls back to Georgia-metric Gelasio or to Times-metric serifs, which are
+narrower; a wider default serif (DejaVu Serif, up to 17% wider) would clip a label's end.
+On a phone, lyric words wrap inside their cell; only a word of 10+ letters is hyphenated,
+with 5+ letters either side, so a hyphen never looks like a syllable split.
 
 ## Lyric placement rules
 
@@ -47,8 +56,14 @@ You choose each line's anchor (Rule 1) and the pickups (Rule 4) in the data file
 `chart_html.py` does the rest: it splits each line over the cells where Whisper heard its
 words, keeps them in sung order, pulls early syllables into the anchor and never lets a
 line reach the next line's anchor or leave its section (Rules 3 and 5); a pickup or an
-ad-lib shares its cell with the line's words. Words Whisper missed are interpolated
-between heard ones, and set a beat apart after the last heard word.
+ad-lib shares its cell with the line's words. A line looks up to 2.5 s back for early
+syllables, but never at words an earlier sung line matched, so a repeated line (the same
+words twice in a row) splits where it is sung instead of taking the first one's times. Nor
+does it take words the next sung line needs when they start nearer that line's anchor
+(Whisper often hears a repeat once): the line then counts as unheard and the next keeps
+its words.
+Words Whisper missed are interpolated between heard ones, and set a beat apart after the
+last heard word.
 
 ### Rule 1 (the big one): Anchor at the chord that resolves the phrase
 
@@ -140,6 +155,9 @@ evidence through:
 - **Header line:** meter, grouping, key/mode and where each came from — e.g.
   "11/8 as 6+5 (sweep HIGH; beat 1 chosen by the player) · E Lydian (bass pedal + ♯4 in
   32/32 bars)". Read it from `foundation.json` → `provenance` and `mode.json`.
+  Audio fetched by `fetch_audio.py` adds its source from `source.json` (`url`,
+  `label_upload` or `channel`, `fetched_at`, `format`, `wav`) — e.g. "Audio: the label's
+  upload on YouTube (youtube.com/watch?v=…), fetched 2026-09-30; opus 131 kbps → 48 kHz WAV".
 - **Cells:** `chart_html.py` gives a chord cell a dotted outline and a small "?" when its
   own evidence names another root: lv-chordia (the primary reader) names a different
   root, or the triad reader does *and* the bass contradicts the chart — the pitch class
@@ -151,9 +169,10 @@ evidence through:
   On real songs they marked 20–50% of cells, mostly sus/add9 voicings a triad template
   can't name — a chart that questions every other cell sends the player nowhere. They stay
   in `chords_lv.json` for a closer look.
-- **After the player's pass,** list the confirmed cells in the data file's `verified` (their
-  "?" and dashed underline go) and say who checked in the provenance line — the chart then
-  shows what a musician checked, not just what software guessed.
+- **After the player's pass,** list the confirmed cells in the data file's `verified` as
+  `(bar, cell)` pairs (`[[9, 1], [12, 2]]` works too; their "?" and dashed underline go)
+  and say who checked in the provenance line — the chart then shows what a musician
+  checked, not just what software guessed.
 
 ## HTML output — `scripts/chart_html.py`
 
@@ -168,7 +187,8 @@ python3 scripts/chart_html.py gen_v1.py --out <shared folder>/<name>.html
 
 **The data file** is Python that defines `SONG`. `title`, `artist`, `sections` and
 `chords` are required; every key is in the script's docstring, and an unknown key or a
-wrong shape is refused with the reason. A minimal example (an invented song):
+wrong shape, type or lyric kind is refused with the reason. A minimal example (an
+invented song):
 
 ```python
 SONG = dict(
@@ -211,9 +231,12 @@ the words file (without one, lines stay whole at their anchor) and `stem_activit
 **The page** is one self-contained file (inline CSS, no external assets): it opens on any
 device and can sit in any shared folder. It prints to A4 (`@media print` tightens fonts
 and padding): about 11 rows (44 bars of 4/4) of chart per page, then the song map and the
-commentary — a 100-bar song takes 4 pages. Print with the browser's headers and footers
-off (they add the date and the file path) and background graphics on (the song map's
-level meters are background colour). In order:
+commentary — a 100-bar song takes 4 pages. A row that is not its section's first repeats
+the section name in print only, so a page that starts mid-section says where it is (row
+heads print darker than on screen: Safari prints the pale greys near-invisible); the
+commentary heading stays with its notes; the song map's level meters and the bar shading
+print even with the browser's background graphics off. Print with the browser's headers
+and footers off (they add the date and the file path). In order:
 - title and key; header facts (tempo, meter, key/mode, length); the provenance line;
 - the chart — per section its name, bar range and note, then rows of cells (chord large,
   bass note in blue parens, lyric small italic), alternate bars shaded, a thick line at

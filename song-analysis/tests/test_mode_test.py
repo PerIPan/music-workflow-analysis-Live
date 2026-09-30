@@ -6,7 +6,7 @@ test must name Lydian and Dorian from their characteristic degrees, and must say
 "undetermined" instead of guessing when the drone has no 6th.
 Run with the analysis venv: <venv>/bin/python tests/test_mode_test.py
 """
-import json, subprocess, sys, tempfile
+import atexit, json, shutil, subprocess, sys, tempfile
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -29,6 +29,7 @@ def main():
     fails = 0
     for name, tonic, notes, want in CASES:
         d = Path(tempfile.mkdtemp())
+        atexit.register(shutil.rmtree, d, True)            # removed at exit
         dur = BARS * BAR
         rng = np.random.default_rng(0)
         sf.write(d / "other.wav", sum(tone(n, dur, 0.1) for n in notes)

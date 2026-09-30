@@ -4,7 +4,7 @@
 Uses a synthetic beat grid and hand-written detect_meter.py results (no audio,
 no madmom). Run: python3 tests/test_foundation.py
 """
-import json, subprocess, sys, tempfile
+import atexit, json, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "foundation.py"
@@ -27,6 +27,7 @@ def main():
         fails += not cond
         print(f"{'PASS' if cond else 'FAIL'}  {name}" + ("" if cond else f"  [{info}]"))
     d = Path(tempfile.mkdtemp())
+    atexit.register(shutil.rmtree, d, True)            # removed at exit
     odd = dict(cycle=11, grouping=[5, 6], downbeat_pulse=6,
                alternative=dict(grouping=[6, 5], downbeat_pulse=0))
 

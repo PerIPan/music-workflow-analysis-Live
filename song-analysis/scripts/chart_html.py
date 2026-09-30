@@ -7,15 +7,20 @@ re-run that keeps the bar grid re-renders without editing (a moved beat 1 shifts
 (bar, cell) key). Lyric lines anchor at the cell of the chord they resolve into (Rule 1,
 references/chart-and-lyrics.md) and are split over the cells where Whisper heard their
 words: pickup words sung before the anchor are pulled into it, nothing spills past the
-next line's anchor or out of the line's section (a pickup or ad-lib shares its cell), and
-words Whisper missed are interpolated between heard ones, a beat apart after the last (a
+next line's anchor or out of the line's section (a pickup or ad-lib shares its cell), a
+line never takes words an earlier line matched (a repeated line keeps its own) nor the
+next line's words sung nearer its anchor (a repeat Whisper heard once), and words Whisper
+missed are interpolated between heard ones, a beat apart after the last (a
 beat = the bar / the grouping's pulse count, so an eighth in 11/8). A cell gets a "?" when
 lv-chordia names another root than the chart, or when the triad reader does and the bass
 contradicts the chart too (the pitch class it sounds longest in the cell, 0.15 s or more,
 is neither the root nor the slash bass). Near-ties and triad-only objections are not
 marked: on real songs they flagged 20-50% of cells, mostly sus/add9 voicings. A cell whose
 lv-chordia chord covers under half of it (a change inside) gets a dashed underline.
-Evidence made on another grid, or with another grouping, is warned about.
+Evidence made on another grid, or with another grouping, is warned about. Columns keep
+their share of the row whatever the labels: a label too wide for its cell (a phone, print)
+shrinks to fit, next to room kept for a "?"; in print a row that is not a section's first
+repeats the section name, and the song map's meters print without background graphics.
 
 Usage (python3, standard library only):
     chart_html.py <song>/gen_v1.py [--out PATH]     # default <folder>/<out>
@@ -28,8 +33,8 @@ chords_lv.json, chord_proposal.json, bass_per_cell.json; if present stem_activit
 SONG, the dict the data file defines. Cells are keyed (bar, cell): bars count from 1 on the
 audio's bar grid, cells from 1, one per group of the grouping (4/4 as [2, 2]: beats 1-2 and
 3-4; 11/8 as [6, 5]: two unequal cells; 3/4: one). Values marked html go in as-is (write
-&amp; for &); all other text is escaped. An unknown key, a wrong shape or a Harte chord
-label is refused with the reason.
+&amp; for &); all other text is escaped. An unknown key, a wrong shape or type, an unknown
+kind or a Harte chord label is refused with the reason.
   Required
     title, artist   str
     sections        [(name, first_bar, last_bar, kind, note_html[, harmony_html])] covering
@@ -43,7 +48,7 @@ label is refused with the reason.
                     + note name = bass note; 'C6/9' is one chord), 'N.C.'; # and b print as
                     sharp and flat signs. Not chords_lv.json's Harte labels ('A:min7').
                     No entry = empty (hold).
-  Optional
+  Optional (a key set to None counts as left out)
     folder          song folder holding analysis/. Default, and base of a relative path:
                     the data file's folder (render() called directly: the working dir)
     out             file name in folder; default '<artist> - <title> - Chords.html' (with
@@ -56,15 +61,17 @@ label is refused with the reason.
                                               words of a line sung there)
                       'pk pk-<section kind>'  the next section's pickup, overlaid in this
                                               cell (beside the line's closing words) in
-                                              that section's colour
+                                              that section's colour; any other kind is
+                                              refused
     words           Whisper words file in analysis/, e.g. 'lyrics_mix.json' ({"words":
                     [{"word", "start"}, ...]}); without it, or with no words in it, every
                     line stays whole at its anchor
     bass_notes      {(bar, cell): 'A'}: bass note printed as (A) on a label with no slash
-    verified        {(bar, cell), ...} a player confirmed: no "?" or split mark there
-                    (say who checked in provenance)
+    verified        [(bar, cell), ...] a player confirmed (JSON-style [bar, cell] lists do
+                    too): no "?" or split mark there (say who checked in provenance)
     grouping        overrides foundation.json's; must match the grid the analysis used
-    bars_per_row    default max(1, 8 // cells per bar): 4 bars of 4/4, 8 of 3/4
+    bars_per_row    a whole number >= 1; default max(1, 8 // cells per bar): 4 bars of
+                    4/4, 8 of 3/4
     duration_s      end of the audio, where a bar past the last downbeat ends; default
                     the last downbeat + one bar
     subline         html line under the title
@@ -80,7 +87,7 @@ label is refused with the reason.
 """
 from __future__ import annotations
 
-import argparse, difflib, html, importlib.util, json, re, sys, unicodedata
+import argparse, difflib, html, importlib.util, json, math, os, re, sys, unicodedata
 from pathlib import Path
 
 PC = {'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6,
@@ -93,6 +100,24 @@ UNITS = {8: 'eighth', 16: 'sixteenth'}                                       # e
 METHOD = ("<p>Of {cells} chord cells, lv-chordia names the chart's root in {lv_pct}% and "
           "the triad reader in {tri_pct}% (of the cells each read); cells marked <b>?</b>: "
           "{n_q}.</p>")
+# Advance widths in em, to shrink a label that is wider than its cell: the chord font
+# (Georgia bold), its sharp and flat (set in the accidental font; the widest of its
+# fallbacks) and the bass note's sans at weight 500 (Helvetica Neue or SF, the wider).
+# Letter-spacing is left out, which errs wide by .02 em a character. Anything else: .8.
+# Where Georgia is missing the chord font falls back to Georgia-metric Gelasio, then to
+# Times-metric Liberation Serif or Tinos (9-20% narrower), not a wider default serif
+# (DejaVu Serif bold: 5-17% wider, its label ends clipped).
+CHORD_EM = {**dict(zip('ABCDEFGHIJKLMNOPQRSTUVWXYZ', (
+    .758, .757, .715, .834, .721, .671, .807, .913, .446, .595, .817, .686, 1.023, .839, .82,
+    .701, .82, .797, .649, .684, .834, .762, 1.127, .809, .732, .69))),
+    **dict(zip('abcdefghijklmnopqrstuvwxyz', (
+        .596, .646, .531, .663, .572, .393, .577, .68, .354, .346, .632, .344, 1.016, .69,
+        .636, .658, .648, .52, .513, .398, .677, .567, .863, .588, .562, .525))),
+    **dict(zip('0123456789', (.701, .49, .627, .625, .65, .599, .648, .554, .676, .648))),
+    '(': .447, ')': .447, '/': .472, '+': .703, '-': .379, '.': .328, '°': .42, 'ø': .636,
+    'Δ': .739, '♯': .55, '♭': .5}
+BASS_EM = {'(': .342, ')': .342, '♯': .549, '♭': .499,
+           **dict(zip('ABCDEFG', (.667, .704, .722, .722, .63, .593, .759)))}
 
 
 def root_pc(label: str | None) -> int | None:
@@ -118,6 +143,19 @@ def pretty(s: str) -> str:
 
 def esc(s: str) -> str:
     return html.escape(s, quote=True)
+
+
+def bass_em(bass: str) -> float:
+    """Width of a printed bass note '(A)' (pretty() text) and its .22 em margin, in em of its
+    own font, rounded up."""
+    return math.ceil((.22 + sum(BASS_EM.get(ch, .8) for ch in f'({bass})')) * 100) / 100
+
+
+def label_em(name: str, bass: str | None) -> float:
+    """Width of a printed label (pretty() text: the chord name and its bass note, if any) in
+    em of the chord font, rounded up, with the bass note at its full-size .5 em."""
+    w = sum(CHORD_EM.get(ch, .8) for ch in name) + (.5 * bass_em(bass) if bass else 0)
+    return math.ceil(w * 100) / 100
 
 
 def norm(w: str) -> str:
@@ -198,16 +236,43 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
     any line words there). Word times come from a local alignment against Whisper's words
     (loose: first four letters, so talk ~ talking; tokens without letters, like '—' or '♪',
     are left out); unmatched words are interpolated between matched ones, from the anchor
-    for a line's opening words, and a beat apart past the last match. Words sung before the
-    line's anchor cell are pulled into it (the chord the phrase resolves into), and nothing
-    spills past the next line's anchor or out of the line's section. With no words, every
-    line stays whole."""
+    for a line's opening words, and a beat apart past the last match. A line looks back
+    2.5 s for early words, but never to a word an earlier line matched: a repeated line
+    would take the previous line's words, which come first. Nor does it take words the next
+    sung line needs when they start nearer that line's anchor than its own (Whisper heard a
+    repeat once): it then counts as unheard, a beat per word. Words sung before the line's
+    anchor cell are pulled into it (the chord the phrase resolves into), and nothing spills
+    past the next line's anchor or out of the line's section. With no words, every line
+    stays whole."""
     entries = sorted(S.get('lyrics', {}).items())
     out, over = {}, {}
     stem = lambda w: norm(w)[:4]
-    wt = [(s, w['start']) for w in words or () for s in [stem(w['word'])] if s]
+    wt = sorted(((s, w['start']) for w in words or () for s in [stem(w['word'])] if s),
+                key=lambda x: x[1])
     end = {b: b1 for _, b0, b1, *_ in S['sections'] for b in range(b0, b1 + 1)}
     sung = [k for k, (_, kind) in entries if kind != 'adlib' and 'pk' not in kind]
+    lines = dict(entries)
+
+    def span(key):                               # (next anchor or section end, its times)
+        bound = (end[key[0]] + 1, 1)
+        nxt = min(next((k for k in sung if k > key), bound), bound)
+        return nxt, grid.start(key), grid.start(nxt) if nxt[0] < len(grid.db) else grid.db[-1]
+
+    def match(key, used, stop=None):
+        """{token index: word index} for the line at key: words after index used (matched by
+        an earlier line) and before stop, from 2.5 s before its anchor to 0.3 s past the next."""
+        _, t_a, t_n = span(key)
+        stems = [stem(t) for t in lines[key][0].split()]
+        keep = [i for i, s in enumerate(stems) if s]
+        win = [i for i in range(used + 1, len(wt) if stop is None else stop)
+               if t_a - 2.5 <= wt[i][1] < t_n + 0.3]
+        sm = difflib.SequenceMatcher(a=[stems[i] for i in keep], b=[wt[i][0] for i in win],
+                                     autojunk=False)
+        return {keep[b.a + k]: win[b.b + k] for b in sm.get_matching_blocks()
+                for k in range(b.size)}
+
+    onset = lambda m, key: abs(wt[min(m.values())][1] - grid.start(key))
+    used = -1                                    # index in wt of the last word matched
     for key, (text, kind) in entries:
         if kind == 'adlib' or 'pk' in kind:
             over[key] = (text, kind)
@@ -215,20 +280,16 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
         if not words:
             out[key] = [text]
             continue
-        bound = (end[key[0]] + 1, 1)
-        nxt = min(next((k for k in sung if k > key), bound), bound)
-        t_a = grid.start(key)
-        t_n = grid.start(nxt) if nxt[0] < len(grid.db) else grid.db[-1]
+        nxt, t_a, _ = span(key)
+        m, nk = match(key, used), next((k for k in sung if k > key), None)
+        if m and nk:          # words the next line needs (a repeat Whisper heard once)?
+            full = match(nk, used)
+            if full and len(match(nk, max(m.values()))) < len(full) \
+                    and onset(full, nk) < onset(m, key):    # sung nearer its anchor: its
+                m = match(key, used, min(full.values()))    # words, this line unheard
+        used = max([used, *m.values()])
         toks = text.split()
-        stems = [stem(t) for t in toks]
-        keep = [i for i, s in enumerate(stems) if s]
-        win = [(w, t) for w, t in wt if t_a - 2.5 <= t < t_n + 0.3]
-        sm = difflib.SequenceMatcher(a=[stems[i] for i in keep], b=[w for w, _ in win],
-                                     autojunk=False)
-        times = [None] * len(toks)
-        for blk in sm.get_matching_blocks():
-            for k in range(blk.size):
-                times[keep[blk.a + k]] = win[blk.b + k][1]
+        times = [wt[m[i]][1] if i in m else None for i in range(len(toks))]
         beat = grid.beat(key[0])
         known = [i for i, t in enumerate(times) if t is not None]
         for i in range(len(toks)):
@@ -264,9 +325,13 @@ def cell_html(S: dict, key: tuple, bar_end: bool, flagged: set, split: set, lyr:
         chord = '<div class="chord rest">N.C.</div>'
     else:
         name, slash = split_slash(ch)
-        bass = slash or S.get('bass_notes', {}).get(key)
-        b = f'<span class="bass">({esc(pretty(bass))})</span>' if bass else ''
-        chord = f'<div class="chord">{esc(pretty(name))}{b}</div>'
+        name, bass = pretty(name), slash or S.get('bass_notes', {}).get(key)
+        bass = bass and pretty(bass)
+        b = f'<span class="bass">({esc(bass)})</span>' if bass else ''
+        acc = re.sub('([♯♭])', r'<span class="acc">\1</span>', esc(name))  # Georgia has no ♭
+        fit = (f' style="--w:{label_em(name, bass):.2f}' + (f';--b:{bass_em(bass):.2f}' if bass
+               else '') + '"') if name or bass else ''
+        chord = f'<div class="chord"{fit}>{acc}{b}</div>'
     text, (otext, okind) = lyr.get(key, ''), over.get(key, ('', ''))
     ly, lcls = esc(text), 'lyric'
     if okind == 'adlib' and not text:                   # an ad-lib on its own: all greyed
@@ -293,7 +358,8 @@ def rows_html(S: dict, n: int, per_row: int, flagged: set, split: set, lyr: dict
                             for b in chunk for c in range(1, n + 1))
             rng = f'bar {chunk[0]}' if len(chunk) == 1 else f'bars {chunk[0]}–{chunk[-1]}'
             head = (f'<span class="row-name">{esc(name)}</span><span class="row-meta">{rng}</span>'
-                    f'<span class="row-note">{note}</span>' if start else
+                    f'<span class="row-note">{note}</span>' if start else     # name: print only
+                    f'<span class="row-name row-sec">{esc(name)}</span>'
                     f'<span class="row-meta">{rng}</span>')
             out.append(f'<div class="row {kind} {"section-start" if start else "section-cont"}">'
                        f'<div class="row-head">{head}</div>'
@@ -338,12 +404,13 @@ def stats(S: dict, lv: dict, tri: dict) -> dict:
 
 def grid_css(grouping: list[int], per_row: int) -> tuple[str, str]:
     """Grid rules for a full row of per_row bars and for shorter rows at the same cell width
-    (unequal groups get proportional columns), and the alternate-bar shading."""
+    (unequal groups get proportional columns), and the alternate-bar shading. Tracks are
+    minmax(0, Nfr): a plain Nfr grows to fit a wide label and pushes the bar lines."""
     n = len(grouping)
     if len(set(grouping)) == 1:
-        tracks = lambda k: f'repeat({n * k},1fr)'
+        tracks = lambda k: f'repeat({n * k},minmax(0,1fr))'
     else:
-        tracks = lambda k: f'repeat({k},{" ".join(f"{g}fr" for g in grouping)})'
+        tracks = lambda k: f'repeat({k},{" ".join(f"minmax(0,{g}fr)" for g in grouping)})'
     rules = [f'.bars{{display:grid;grid-template-columns:{tracks(per_row)};border:1px solid '
              f'#d4d4d0;border-radius:3px;overflow:hidden}}']
     for k in range(1, per_row):
@@ -382,25 +449,28 @@ h1{font-size:1.15em;margin:0 0 .05em;font-weight:600}
 .row-head{display:flex;align-items:baseline;gap:.6em;margin:0 0 .12em .05em;flex-wrap:wrap}
 .row-meta{font-family:Menlo,"Courier New",monospace;font-size:.7em;color:#999}
 .row-note{font-size:.72em;color:#999;font-style:italic}
+.row-sec{display:none}
 .row.verse .row-name{color:#4a6f96} .row.post .row-name{color:#b58632} .row.chorus .row-name{color:#b03030}
 .row.inst .row-name{color:#777} .row.bridge .row-name{color:#5b9a52} .row.outro .row-name,.row.intro .row-name{color:#999}
 @GRID@
-.half{border-right:1px solid #ececea;padding:.45em .5em .4em;min-height:4.2em;background:#fff;position:relative}
+.half{border-right:1px solid #ececea;padding:.45em .5em .4em;min-height:4.2em;background:#fff;position:relative;container-type:inline-size;--cap:1.85rem}
 @SHADE@
 .half.bar-end{border-right:2px solid #b8b8b0}
 .half:last-child{border-right:none}
-.half.q{outline:1.5px dotted #b03030;outline-offset:-3px}
+.half.q{outline:1.5px dotted #b03030;outline-offset:-3px;--room:.6rem}
 .half.q::after{content:"?";position:absolute;top:.15em;right:.35em;font-size:.8em;font-weight:800;color:#b03030}
-.chord{font-size:1.85em;font-weight:700;color:#1a1a1a;font-family:Georgia,serif;line-height:1;min-height:1.05em;letter-spacing:-.02em;white-space:nowrap}
+.chord{font-size:1.85em;font-weight:700;color:#1a1a1a;font-family:Georgia,Gelasio,"Liberation Serif",Tinos,"Times New Roman",serif;line-height:1;min-height:1.05em;letter-spacing:-.02em;white-space:nowrap}
+.chord[style]{--a:calc(100cqi - var(--room,0rem));--n:calc(var(--w) - .5 * var(--b,0));font-size:min(var(--cap),calc(var(--a) / var(--w)),max(calc((var(--a) - .6rem * var(--b,0)) / var(--n)),calc(var(--a) / (var(--n) + .75 * var(--b,0)))));box-sizing:border-box;min-height:calc(1.05 * var(--cap));padding:calc(.85 * (var(--cap) - 1em)) 0 0 .1em;margin:0 var(--room,0rem) 0 -.1em;overflow-x:clip}
 .chord.rest{color:#c5c5c5;font-style:italic;font-size:1.3em}
-.chord .bass{font-size:.5em;font-weight:500;color:#4a6f96;margin-left:.22em;vertical-align:middle;letter-spacing:0;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
-.lyric{font-size:.68em;color:#666;margin-top:.5em;line-height:1.2;min-height:1.2em;font-style:italic}
+.chord .acc{font-family:STIXGeneral,"Apple Symbols","Segoe UI Symbol","Noto Music","Noto Sans Symbols 2",serif;line-height:0}
+.chord .bass{font-size:max(.5em,min(.6rem,.75em));font-weight:500;color:#4a6f96;margin-left:.22em;vertical-align:middle;letter-spacing:0;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
+.lyric{font-size:.68em;color:#666;margin-top:.5em;line-height:1.2;min-height:1.2em;font-style:italic;overflow-wrap:break-word}
 .lyric.adlib{color:#aaa}
 .lyric .pickup{font-weight:600;margin-left:.45em;font-style:normal;color:#b03030}
 .lyric .pickup.pk-verse{color:#4a6f96} .lyric .pickup.pk-post{color:#b58632} .lyric .pickup.pk-outro{color:#888}
 @EXTRA@
 .notes{margin-top:1.8em;padding-top:.6em;border-top:2px solid #d8d8d4}
-.notes h2{font-size:.95em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0 0 .6em;color:#444}
+.notes h2{break-after:avoid;page-break-after:avoid;font-size:.95em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0 0 .6em;color:#444}
 .notes-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7em 1.2em}
 .note-block{font-size:.78em;line-height:1.45;padding:.55em .7em;background:#fafaf7;border:1px solid #eaeae5;border-radius:4px;page-break-inside:avoid}
 .note-block.wide{grid-column:1/-1}
@@ -420,11 +490,16 @@ td.sn.bridge{color:#5b9a52} td.sn.post{color:#b58632} td.sn.intro,td.sn.outro,td
 .track{display:inline-block;width:52px;height:7px;background:#eeeeea;border-radius:2px;overflow:hidden;vertical-align:middle}
 .meter{display:block;height:7px;background:#b03030;opacity:.8}
 .meter.b{background:#4a6f96} .meter.d{background:#5b9a52} .meter.k{background:#b58632}
-@media (max-width:720px){.notes-grid{grid-template-columns:1fr}.track{width:32px}}
+.track,.meter,.bars,.note-block{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media (max-width:720px){.notes-grid{grid-template-columns:1fr}.track{width:32px}
+ .lyric{-webkit-hyphens:auto;hyphens:auto;hyphenate-limit-chars:10 5 5;-webkit-hyphenate-limit-before:5;-webkit-hyphenate-limit-after:5}}
 @media print{body{max-width:100%;margin:0;padding:.3em}
  .chart{overflow:visible}.row{min-width:0}
  .row.section-start{margin-top:.4em;padding-top:.25em}
- .half{min-height:3.4em;padding:.3em .35em}.chord{font-size:1.55em}.lyric{font-size:.62em}
+ .row-meta,.row-note,.row.inst .row-name,.row.outro .row-name,.row.intro .row-name{color:#666}
+ .row.post .row-name{color:#8f6420}.row.bridge .row-name{color:#437a3b}
+ .row-sec{display:inline;font-size:.7em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;line-height:1}
+ .half{min-height:3.4em;padding:.3em .35em;--cap:1.55rem}.chord{font-size:1.55em}.lyric{font-size:.62em}
  .note-block{font-size:.7em;padding:.4em .55em}
  @page{size:A4 portrait;margin:.35in}}
 """
@@ -435,11 +510,16 @@ KEYS = {'title', 'artist', 'sections', 'chords', 'folder', 'out', 'key_short', '
         'words', 'bass_notes', 'verified', 'grouping', 'bars_per_row', 'duration_s', 'subline',
         'facts', 'provenance', 'map_note', 'notes', 'method'}
 KINDS = ('intro', 'verse', 'post', 'chorus', 'bridge', 'inst', 'outro')
+LYRIC_KINDS = ('', 'adlib', *(f'pk pk-{k}' for k in KINDS))
+NOTE_CLASSES = ('', 'open', 'reading')
+TEXT_KEYS = ('title', 'artist', 'out', 'key_short', 'words', 'subline', 'provenance',
+             'map_note', 'method')
 
 
 def check_song(S: dict) -> None:
-    """Refuse a SONG the renderer would misread - a missing or unknown key, a wrong shape, a
-    Harte label, sections that skip, repeat or reorder bars - instead of rendering garbage."""
+    """Refuse a SONG the renderer would misread - a missing or unknown key, a wrong shape or
+    type, an unknown kind, a Harte label, sections that skip, repeat or reorder bars -
+    instead of rendering garbage or stopping with a traceback."""
     if 'map_harmony' in S:
         raise ValueError("'map_harmony' is gone: give each section tuple its harmony text "
                          "as a 6th element")
@@ -447,6 +527,14 @@ def check_song(S: dict) -> None:
     unknown = sorted(set(S) - KEYS)
     if missing or unknown:
         raise ValueError(f'SONG keys missing {missing}, unknown {unknown} - see the docstring')
+    whole = lambda x: isinstance(x, int) and not isinstance(x, bool)
+    text = lambda *xs: all(isinstance(x, str) for x in xs)
+    short = lambda v: repr(v) if len(repr(v)) <= 60 else repr(v)[:57] + '...'
+    bad = [k for k in TEXT_KEYS if k in S and not isinstance(S[k], str)]
+    if 'folder' in S and not isinstance(S['folder'], (str, os.PathLike)):
+        bad.append('folder')
+    if bad:
+        raise ValueError(f"{', '.join(map(repr, bad))}: text expected - see the docstring")
     tuples = lambda v, lo, hi: isinstance(v, (list, tuple)) and all(
         isinstance(x, (list, tuple)) and lo <= len(x) <= hi for x in v)
     shapes = (('sections', '(name, first_bar, last_bar, kind, note[, harmony])', 5, 6),
@@ -454,20 +542,58 @@ def check_song(S: dict) -> None:
     for name, shape, lo, hi in shapes:
         if not tuples(S.get(name, []), lo, hi):
             raise ValueError(f"'{name}' must be a list of {shape} tuples")
-    cell = lambda k: isinstance(k, tuple) and len(k) == 2 and all(isinstance(x, int) for x in k)
+    if not S['sections']:
+        raise ValueError("'sections' is empty: the sections cover every bar from 1")
+    bad = [sec for sec in S['sections'] if not (text(sec[0], *sec[4:]) and whole(sec[1])
+                                                 and whole(sec[2]))]
+    if bad:
+        raise ValueError(f'section {short(bad[0])}: name, note and harmony are text, the '
+                         'bars whole numbers')
+    bad = [x for x in (*S.get('facts', []), *S.get('notes', [])) if not text(*x)]
+    bad += [x for x in S.get('notes', []) if len(x) > 2 and x[2] not in NOTE_CLASSES]
+    if bad:
+        raise ValueError(f"facts and notes take text, a note's cls '', 'open' or 'reading': "
+                         f'{short(bad[0])}')
+    cell = lambda k: isinstance(k, tuple) and len(k) == 2 and all(whole(x) for x in k)
     for name in ('chords', 'lyrics', 'bass_notes'):
         v = S.get(name, {})
         if not isinstance(v, dict) or not all(cell(k) for k in v):
             raise ValueError(f"'{name}' must be a dict keyed by (bar, cell) tuples")
     bad = [k for k, v in S.get('lyrics', {}).items()
-           if not (isinstance(v, (list, tuple)) and len(v) == 2)]
+           if not (isinstance(v, (list, tuple)) and len(v) == 2 and isinstance(v[0], str))]
     if bad:
         raise ValueError(f'lyrics values must be (text, kind) tuples: {bad[:4]}')
+    bad = [(k, v[1]) for k, v in S.get('lyrics', {}).items() if v[1] not in LYRIC_KINDS]
+    if bad:
+        raise ValueError("a lyric's kind is '' (a sung line), 'adlib' or 'pk pk-<next "
+                         f"section's kind>' ({', '.join(KINDS)}): {bad[:4]}")
     bad = [k for k, c in S['chords'].items() if not isinstance(c, str) or ':' in c
            or c in ('N', 'X')]
     if bad:
         raise ValueError("chords take lead-sheet symbols ('Am7', 'E/G#', 'N.C.'), not "
                          f"chords_lv.json's Harte labels: {bad[:4]}")
+    bad = [k for k, n in S.get('bass_notes', {}).items()
+           if not (isinstance(n, str) and re.fullmatch(r'[A-G][#b]?', n))]
+    if bad:
+        raise ValueError(f"bass_notes take a note name ('A', 'F#', 'Bb'): {bad[:4]}")
+    v = S.get('verified', [])
+    if not (isinstance(v, (list, tuple, set, frozenset)) and all(
+            isinstance(k, (list, tuple)) and len(k) == 2 and all(whole(x) for x in k)
+            for k in v)):
+        raise ValueError("'verified' must be a list of (bar, cell) pairs, e.g. [(9, 1), "
+                         f"(12, 2)] or [[9, 1], [12, 2]]; got {short(v)}")
+    v = S.get('bars_per_row', 1)
+    if not (whole(v) and v >= 1):
+        raise ValueError(f"'bars_per_row' must be a whole number of bars, 1 or more; got "
+                         f'{short(v)}')
+    v = S.get('grouping', [1])
+    if not (isinstance(v, (list, tuple)) and v and all(whole(g) and g >= 1 for g in v)):
+        raise ValueError("'grouping' must list the pulses per cell, e.g. [2, 2] or [6, 5]; got "
+                         f'{short(v)}')
+    v = S.get('duration_s', 1)
+    if not (isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+            and v > 0):
+        raise ValueError(f"'duration_s' must be the audio's length in seconds; got {short(v)}")
     first = 1
     for name, b0, b1, kind, *_ in S['sections']:
         if b0 != first or b1 < b0:
@@ -485,7 +611,8 @@ def check(S: dict, grid: Grid, last_bar: int) -> None:
     if last_bar > nbars:
         raise ValueError(f'sections run to bar {last_bar}; the beat grid has {nbars} bars '
                          '(one bar past the last downbeat is allowed)')
-    bad = sorted(k for k in (*S['chords'], *S.get('lyrics', {}), *S.get('bass_notes', {}))
+    bad = sorted(k for k in (*S['chords'], *S.get('lyrics', {}), *S.get('bass_notes', {}),
+                             *map(tuple, S.get('verified', [])))
                  if not (1 <= k[0] <= last_bar and 1 <= k[1] <= grid.n))
     if bad:
         raise ValueError(f'cells outside the sections (bars 1-{last_bar}) or the '
@@ -517,6 +644,7 @@ def load_json(path: Path):
 
 def render(S: dict, out: str | Path | None = None) -> Path:
     """Write the chart for SONG dict S to out (default <folder>/<out>); returns the path."""
+    S = {k: v for k, v in S.items() if v is not None}      # None = left out
     check_song(S)
     folder = Path(S.get('folder', '.'))
     a = folder / 'analysis'
@@ -558,7 +686,7 @@ def render(S: dict, out: str | Path | None = None) -> Path:
                   'its anchor', file=sys.stderr)
             words = None
 
-    verified = set(S.get('verified', ()))
+    verified = {tuple(k) for k in S.get('verified', ())}
     flagged, split = flags(S, lv, tri, bass) - verified, splits(S, lv) - verified
     lyr, over = distribute(S, grid, words)
     st = stats(S, lv, tri)
@@ -600,11 +728,12 @@ def render(S: dict, out: str | Path | None = None) -> Path:
         "Lyrics sit where they're sung; pickup syllables are pulled into the chord the phrase "
         'lands on. Empty lyric = hold.' if words is not None else
         'Each lyric line sits at the chord the phrase lands on. Empty lyric = hold.',
-        '<b style="color:#b03030">Coloured words</b> = the next section\'s pickup, starting '
-        'inside this box.',
         f'<span style="color:#b03030">?</span> + dotted box = this '
         f"{'half-bar' if halves else 'cell'}'s own reading names a different chord — check by "
         'ear.']
+    if any(kind.startswith('pk') for _, kind in over.values()):
+        legend.insert(3, '<b style="color:#b03030">Coloured words</b> = the next section\'s '
+                         'pickup, starting inside this box.')
     if split:
         legend.append('Dashed underline = the chord changes inside this cell — listen for where.')
     items = ''.join(f'<li>{x}</li>\n' for x in legend)
@@ -651,7 +780,10 @@ def load_song(path: str | Path) -> dict:
     if not isinstance(getattr(mod, 'SONG', None), dict):
         raise ValueError(f'{path} defines no SONG dict')
     S = dict(mod.SONG)
-    S['folder'] = str(path.parent / S.get('folder', '.'))
+    folder = S.get('folder') or '.'
+    if not isinstance(folder, (str, os.PathLike)):
+        raise ValueError(f"'folder' must be a path; got {folder!r}")
+    S['folder'] = str(path.parent / folder)
     return S
 
 
@@ -663,8 +795,10 @@ def main():
     sys.dont_write_bytecode = True                # no __pycache__ in the song folder
     try:
         render(load_song(a.song), a.out)
-    except (OSError, ValueError, KeyError) as e:
-        sys.exit(f"chart_html: {e!r}" if isinstance(e, KeyError) else f"chart_html: {e}")
+    except (OSError, ValueError) as e:
+        sys.exit(f'chart_html: {e}')
+    except Exception as e:     # anything else wrong in the data file or analysis/: no traceback
+        sys.exit(f'chart_html: {type(e).__name__}: {e}')
 
 
 if __name__ == "__main__":

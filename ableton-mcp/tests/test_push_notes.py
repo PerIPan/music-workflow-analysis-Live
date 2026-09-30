@@ -5,7 +5,7 @@ Checks chunking, stop-on-failure (exit 1, no false "pushed"), the out-of-bounds
 clear, set/get_signature read-back, and seconds -> Live beats with pre-roll.
 Run: python3 tests/test_push_notes.py   (standard library only)
 """
-import json, os, socket, subprocess, sys, tempfile, threading
+import atexit, json, os, shutil, socket, subprocess, sys, tempfile, threading
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "push_notes.py"
@@ -47,6 +47,7 @@ def main():
         print(f"{'PASS' if cond else 'FAIL'}  {name}" + (f"  [{info}]" if not cond else ""))
 
     d = Path(tempfile.mkdtemp())
+    atexit.register(shutil.rmtree, d, True)            # removed at exit
     beats = d / "beats.json"
     json.dump([dict(pitch=60, start_time=i * .25, duration=.25, velocity=90, mute=False)
                for i in range(700)], open(beats, "w"))

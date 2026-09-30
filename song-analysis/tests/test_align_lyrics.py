@@ -5,7 +5,7 @@ Synthetic song: three sections (one labelled), a mantra line repeated four times
 which Whisper keeps only two, a misheard word, a Greek line with accents and final
 sigma, and a hallucinated word in a gap. Run: python3 tests/test_align_lyrics.py
 """
-import json, subprocess, sys, tempfile
+import atexit, json, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "align_lyrics.py"
@@ -34,6 +34,7 @@ WHISPER = [("Lay", 10.0), ("awake", 10.4), ("at", 10.8), ("night", 11.0),
 
 def main():
     d = Path(tempfile.mkdtemp())
+    atexit.register(shutil.rmtree, d, True)            # removed at exit
     (d / "l.txt").write_text(LYRICS, encoding="utf-8")
     json.dump({"words": [dict(word=w, start=t, end=t + 0.3) for w, t in WHISPER]},
               open(d / "w.json", "w"), ensure_ascii=False)

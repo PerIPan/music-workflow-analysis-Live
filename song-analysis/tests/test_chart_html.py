@@ -3,24 +3,31 @@
 
 A 4/4 song checks lyric placement (pickup pulled into the anchor, no spill past the next
 anchor, unheard words a beat apart), the "?" rule, N.C., slash bass, pickup overlay, the
-split mark and HTML escaping; then the same song without words or stem levels and with
-player-verified cells, and broken words files. Small songs check lyric edge cases (a line
-sharing a pickup's or an ad-lib's cell, a line stopped at its section's end, Greek words,
-a '♪' token), chord evidence (the "?" without --compare, the split mark by coverage, odd
-labels, a stale grid). A 6+5 bar, a 3/4 bar (plus a tail bar past the last downbeat) and a
-2+2+3 bar check the grid; malformed data is refused, and the CLI renders a data file.
+split mark, HTML escaping and the page's fit and print rules (label widths, room for the
+"?", tight accidentals, meters printed without backgrounds); then the same song without
+words or stem levels and with player-verified cells, and broken words files. Small songs
+check lyric edge cases (a line sharing a pickup's or an ad-lib's cell, a line stopped at
+its section's end, a repeated line, Greek words, a '♪' token), chord evidence (the "?"
+without --compare, the split mark by coverage, odd labels, a stale grid). A 6+5 bar, a
+3/4 bar (plus a tail bar past the last downbeat, and a row that repeats its section's name
+in print) and a 2+2+3 bar check the grid; malformed data is refused, and the CLI renders a
+data file and reports bad data without a traceback. Temp folders are removed at exit.
 Run: python3 tests/test_chart_html.py
 """
-import contextlib, io, json, re, subprocess, sys, tempfile
+import atexit, contextlib, io, json, re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-from chart_html import render  # noqa: E402
+from chart_html import bass_em, label_em, render  # noqa: E402
 
-CELL = re.compile(r'<div class="(half[^"]*)"><div class="(chord[^"]*)">(.*?)</div>'
-                  r'<div class="(lyric[^"]*)">(.*?)</div></div>')
+TMP = Path(tempfile.mkdtemp(prefix="chart_html_"))
+atexit.register(shutil.rmtree, TMP, True)
+CELL = re.compile(r'<div class="(half[^"]*)"><div class="(chord[^"]*)"(?: style="[^"]*")?>'
+                  r'(.*?)</div><div class="(lyric[^"]*)">(.*?)</div></div>')
+WIDTH = re.compile(r'<div class="chord[^"]*"(?: style="--w:([\d.]+)(?:;--b:[\d.]+)?")?>')
 PICKUP = re.compile(r'<span class="pickup[^"]*">.*?</span>')
+ACC = lambda s: f'<span class="acc">{s}</span>'                  # a ♯ or ♭ in a chord name
 
 
 def make_song(grouping, bar_len, nbars, chords, evidence=None, words=None, act=None,
@@ -28,7 +35,7 @@ def make_song(grouping, bar_len, nbars, chords, evidence=None, words=None, act=N
     """Song folder with analysis/ files. evidence: {(bar, cell): (lv, status, triad, bass[,
     lv coverage])}, coverage 0.4 for change-inside, else 1; other chord cells get agreeing
     readers and no bass. Evidence cells carry their start time and grouping, as upstream."""
-    d = Path(tempfile.mkdtemp(prefix="chart_html_"))
+    d = Path(tempfile.mkdtemp(dir=TMP))
     a = d / "analysis"
     a.mkdir()
     put = lambda name, obj: (a / name).write_text(json.dumps(obj), encoding="utf-8")
@@ -61,6 +68,12 @@ def build(S, d, name):
 def at(cells, n):
     """{(bar, cell): (classes, chord_class, chord_html, lyric_class, lyric_html)}."""
     return {(i // n + 1, i % n + 1): c for i, c in enumerate(cells)}
+
+
+def widths(doc, n):
+    """{(bar, cell): the label's --w in em, or None (no style: N.C., an empty cell)}."""
+    return {(i // n + 1, i % n + 1): float(w) if w else None
+            for i, w in enumerate(WIDTH.findall(doc))}
 
 
 def lyric(cell):
@@ -139,9 +152,9 @@ def main():
     check("N.C. cells", C[(1, 1)][1:3] == ("chord rest", "N.C.") and
           C[(8, 2)][1:3] == ("chord rest", "N.C."), C[(1, 1)])
     check("slash chord -> Em (D)", C[(3, 2)][2] == 'Em<span class="bass">(D)</span>', C[(3, 2)][2])
-    check("bass_notes + flat -> B♭ (A); sharp -> F♯m7",
-          C[(5, 2)][2] == 'B♭<span class="bass">(A)</span>' and C[(5, 1)][2] == "F♯m7",
-          (C[(5, 1)][2], C[(5, 2)][2]))
+    check("bass_notes + flat -> B♭ (A); sharp -> F♯m7 (accidentals in their own span)",
+          C[(5, 2)][2] == f'B{ACC("♭")}<span class="bass">(A)</span>'
+          and C[(5, 1)][2] == f'F{ACC("♯")}m7', (C[(5, 1)][2], C[(5, 2)][2]))
     check("pickup overlay in its cell, in the bridge colour",
           '<span class="pickup pk-bridge">Oh now</span>' in C[(7, 2)][4]
           and ".lyric .pickup.pk-bridge{color:#5b9a52}" in doc, C[(7, 2)][4])
@@ -162,9 +175,49 @@ def main():
     check("short rows keep cell width (1 bar, 3 bars)",
           '<span class="row-meta">bar 1</span>' in doc and doc.count('class="bars cols-2"') == 1
           and doc.count('class="bars cols-6"') == 1
-          and ".bars.cols-6{grid-template-columns:repeat(6,1fr);max-width:75%}" in doc)
+          and ".bars.cols-6{grid-template-columns:repeat(6,minmax(0,1fr));max-width:75%}" in doc)
+    check("columns can't grow with a wide label (minmax(0, 1fr) tracks)",
+          ".bars{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));" in doc)
     check("2-cell shading", ".half:nth-child(4n+1),.half:nth-child(4n+2){background:#fbfbf8}"
           in doc)
+    W = widths(doc, 2)
+    near = lambda w, x: w is not None and abs(w - x) <= 0.011
+    check("each label carries its width in em (none on N.C.): C, Em/D, B♭ (A)",
+          W[(1, 1)] is None and near(W[(2, 1)], 0.72) and near(W[(3, 2)], 2.55)
+          and near(W[(5, 2)], 2.05), {k: W[k] for k in ((1, 1), (2, 1), (3, 2), (5, 2))})
+    check("label widths: a flat as narrow as a sharp, long labels wide",
+          near(label_em("B♭", None), 1.26) and near(label_em("F♯m7", None), 2.8)
+          and label_em("E♭maj7♯11", None) > 5, label_em("B♭", None))
+    check("a label wider than its cell shrinks to fit it (container units), clipped at its edge",
+          "container-type:inline-size;--cap:1.85rem}" in doc
+          and ".chord[style]{--a:calc(100cqi - var(--room,0rem));" in doc
+          and "font-size:min(var(--cap),calc(var(--a) / var(--w))," in doc
+          and "overflow-x:clip}" in doc)
+    check("a slash label carries its bass width (--b); the bass keeps a floor, the name fits "
+          "beside it", re.search(r'<div class="chord" style="--w:2\.5\d;--b:1\.63">Em<span '
+                               r'class="bass">', doc) and near(bass_em("D"), 1.63) and ".chord .bass{font-size:max(.5em,min(.6rem,"
+          ".75em));" in doc and "max(calc((var(--a) - .6rem * var(--b,0)) / var(--n)),calc("
+          "var(--a) / (var(--n) + .75 * var(--b,0)))))" in doc, bass_em("D"))
+    check("chord font falls back to Georgia- or Times-metric serifs, not a wider default",
+          'font-family:Georgia,Gelasio,"Liberation Serif",Tinos,"Times New Roman",serif;' in doc)
+    check("a '?' cell keeps room for the mark", ".half.q{outline:1.5px dotted #b03030;"
+          "outline-offset:-3px;--room:.6rem}" in doc and "margin:0 var(--room,0rem) 0 -.1em" in doc)
+    check("accidentals set in a font with a narrow ♭ (Georgia has none)",
+          '.chord .acc{font-family:STIXGeneral,"Apple Symbols","Segoe UI Symbol"' in doc)
+    check("print: meters, bar shading and note tints print without background graphics",
+          ".track,.meter,.bars,.note-block{-webkit-print-color-adjust:exact;"
+          "print-color-adjust:exact}" in doc)
+    check("print: the notes headings stay with their blocks",
+          ".notes h2{break-after:avoid;page-break-after:avoid;" in doc)
+    check("print: the chord size cap drops to 1.55rem", "--cap:1.55rem}" in doc)
+    check("phone: long lyric words wrap; only 10+ letter words hyphenate, 5+ letters a side",
+          "overflow-wrap:break-word}" in doc and ".lyric{-webkit-hyphens:auto;hyphens:auto;"
+          "hyphenate-limit-chars:10 5 5;-webkit-hyphenate-limit-before:5;"
+          "-webkit-hyphenate-limit-after:5}}" in doc)
+    check("print: pale row heads darkened (WebKit prints them near-invisible)",
+          " .row-meta,.row-note,.row.inst .row-name,.row.outro .row-name,.row.intro .row-name"
+          "{color:#666}" in doc)
+    check("pickup legend when the chart has a pickup", "Coloured words</b> = the next" in doc)
     check("song map: harmony + 4 stem meters", "<th>Harmony</th><th>Vocal</th><th>Bass</th>"
           "<th>Drums</th><th>Keys/gtr</th>" in doc and "<td>C · Em/D</td>" in doc)
     check("method placeholders", "<p>12|92|67|2</p>" in doc,
@@ -185,6 +238,8 @@ def main():
     check("player-verified cells lose their ? and split mark",
           {k for k, v in C.items() if "q" in v[0].split()} == {(3, 1)}
           and "split" not in C[(6, 1)][0].split() and ".half.split" not in doc)
+    doc2, _ = build(dict(S, verified=[[2, 1], [6, 1]]), d, "verified.html")
+    check("verified as JSON-style [bar, cell] lists works the same", doc2 == doc)
 
     wf = d / "analysis" / "words.json"
     wf.write_text('{"words": []}', encoding="utf-8")
@@ -244,6 +299,35 @@ def main():
     check("the last line runs to its section's last bar (no 4-bar cap, no unrendered bar)",
           P == {(3, 1): "amber", (4, 1): "rain", (5, 1): "falls", (6, 1): "on",
                 (7, 1): "quiet", (8, 1): "wooden roofs"}, P)
+    line = "paper lanterns drifting home"                # sung twice, a bar apart
+    heard = [(w, b + dt) for b in (2.1, 4.1) for w, dt in zip(line.split(), (0, .4, 1, 1.4))]
+    _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
+                  {(2, 1): (line, ""), (3, 1): (line, "")}, heard, "repeat.html")
+    check("a repeated line keeps its own words (not the line before's, 2.5 s back)",
+          P == {(2, 1): "paper lanterns", (2, 2): "drifting home",
+                (3, 1): "paper lanterns", (3, 2): "drifting home"}, P)
+    line = "salt wind rising"                           # sung 3x, Whisper heard 1st and 3rd
+    three = {(1, 1): (line, ""), (2, 1): (line, ""), (3, 1): (line, "")}
+    for early, name in ((0, "at its anchor"), (.4, "0.4 s early")):
+        heard = [(w, b - early * (b > 0) + .3 * j) for b in (0.0, 4.0)
+                 for j, w in enumerate(line.split())]
+        _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")], three, heard,
+                      "dropped.html")
+        check(f"a repeat Whisper missed leaves the next one its words (next sung {name})",
+              P == {(1, 1): line, (2, 1): "salt wind", (2, 2): "rising", (3, 1): line}, P)
+    heard = [(w, .3 * j) for j, w in enumerate("salt on stone".split())] + \
+            [(w, 4.0 + .3 * j) for j, w in enumerate("salt and smoke".split())]
+    _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
+                  {(1, 1): ("salt on stone", ""), (2, 1): ("salt wind rising", ""),
+                   (3, 1): ("salt and smoke", "")}, heard, "shared.html")
+    check("an unheard line leaves the next line its shared first word",
+          P == {(1, 1): "salt on stone", (2, 1): "salt wind", (2, 2): "rising",
+                (3, 1): "salt and smoke"}, P)
+    heard = [(w, .3 * j) for j, w in enumerate(line.split())]
+    _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
+                  {(1, 1): (line, ""), (2, 1): (line, "")}, heard, "second.html")
+    check("a line keeps its own words when the unheard repeat after it wants them",
+          P == {(1, 1): line, (2, 1): "salt wind", (2, 2): "rising"}, P)
     _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
                   {(2, 1): ("ένα δύο τρία τέσσερα", ""), (3, 1): ("πέντε έξι επτά", "")},
                   list(zip("ένα δύο τρία τέσσερα πέντε έξι επτά".split(),
@@ -276,9 +360,10 @@ def main():
     sp = {k for k, v in C.items() if "split" in v[0].split()}
     check("split mark from lv coverage under half, whatever the status", sp == {(2, 1)}, sp)
     lab = [C[k][2] for k in ((3, 1), (3, 2), (4, 1), (4, 2))]
-    check("labels: 6/9 is no slash chord; E♯ and C♭ bass; m7♭5",
-          lab == ["C6/9", 'C♯<span class="bass">(E♯)</span>', "F♯m7♭5",
-                  'G♭<span class="bass">(C♭)</span>'], lab)
+    check("labels: 6/9 is no slash chord; E♯ and C♭ bass (sans, no span); m7♭5",
+          lab == ["C6/9", f'C{ACC("♯")}<span class="bass">(E♯)</span>',
+                  f'F{ACC("♯")}m7{ACC("♭")}5', f'G{ACC("♭")}<span class="bass">(C♭)</span>'], lab)
+    check("no pickup, no pickup legend", "Coloured words" not in doc)
     check("evidence made on this grid: no warning", err.getvalue() == "", err.getvalue())
     F = json.loads((d / "analysis" / "foundation.json").read_text(encoding="utf-8"))
     F["downbeat_times"] = [t + 1.0 for t in F["downbeat_times"]]     # beat 1 moved half a bar
@@ -302,9 +387,9 @@ def main():
     check("6+5: 2 cells per bar, bar-end on the 5", len(cells) == 10 and all(
         ("bar-end" in v[0].split()) == (k[1] == 2) for k, v in C.items()), len(cells))
     check("6+5: columns to scale, short row too",
-          ".bars{display:grid;grid-template-columns:repeat(4,6fr 5fr);" in doc
-          and ".bars.cols-2{grid-template-columns:repeat(1,6fr 5fr);max-width:25%}" in doc
-          and doc.count('class="bars cols-2"') == 1)
+          ".bars{display:grid;grid-template-columns:repeat(4,minmax(0,6fr) minmax(0,5fr));"
+          in doc and ".bars.cols-2{grid-template-columns:repeat(1,minmax(0,6fr) minmax(0,5fr));"
+                     "max-width:25%}" in doc and doc.count('class="bars cols-2"') == 1)
     check("6+5: split at 6/11 of the bar, not the middle",
           L[(1, 1)] == "Cold winds" and L[(1, 2)] == "carry", (L[(1, 1)], L[(1, 2)]))
     check("6+5: unheard words an eighth (bar / 11) apart",
@@ -328,10 +413,15 @@ def main():
     check("3/4: one cell per bar, every cell ends a bar", len(cells) == 11 and all(
         "bar-end" in v[0].split() for v in C.values()), len(cells))
     check("3/4: 8 bars a row, shorter rows at the same width",
-          ".bars{display:grid;grid-template-columns:repeat(8,1fr);" in doc
-          and ".bars.cols-2{grid-template-columns:repeat(2,1fr);max-width:25%}" in doc
-          and ".bars.cols-1{grid-template-columns:repeat(1,1fr);max-width:12.5%}" in doc
-          and doc.count('class="bars cols-2"') == 1 and doc.count('class="bars cols-1"') == 1)
+          ".bars{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));" in doc
+          and ".bars.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));max-width:25%}" in doc
+          and ".bars.cols-1{grid-template-columns:repeat(1,minmax(0,1fr));max-width:12.5%}"
+          in doc and doc.count('class="bars cols-2"') == 1
+          and doc.count('class="bars cols-1"') == 1)
+    check("a section's later rows name it for print only, its first row doesn't",
+          doc.count('class="row-name row-sec"') == 1 and '<span class="row-name row-sec">Verse'
+          '</span><span class="row-meta">bars 9–10</span>' in doc
+          and ".row-sec{display:none}" in doc and " .row-sec{display:inline;" in doc)
     check("1-cell shading", ".half:nth-child(2n+1){background:#fbfbf8}" in doc)
     check("3/4: words by bar", L[(2, 1)] == "Waltz along the" and L[(3, 1)] == "river bend",
           (L[(2, 1)], L[(3, 1)]))
@@ -350,10 +440,16 @@ def main():
     check("3-cell shading, 2 bars a row", len(cells) == 18
           and ".half:nth-child(6n+1),.half:nth-child(6n+2),.half:nth-child(6n+3)"
               "{background:#fbfbf8}" in doc
-          and ".bars{display:grid;grid-template-columns:repeat(2,2fr 2fr 3fr);" in doc)
+          and ".bars{display:grid;grid-template-columns:repeat(2,minmax(0,2fr) minmax(0,2fr) "
+              "minmax(0,3fr));" in doc)
     doc, _ = build(dict(S, bars_per_row=3), d, "seven3.html")
-    check("bars_per_row override", ".bars{display:grid;grid-template-columns:repeat(3,2fr 2fr "
-          "3fr);" in doc and "max-width:33.333%}" in doc and "max-width:66.667%}" in doc)
+    check("bars_per_row override", ".bars{display:grid;grid-template-columns:repeat(3,minmax(0,"
+          "2fr) minmax(0,2fr) minmax(0,3fr));" in doc and "max-width:33.333%}" in doc
+          and "max-width:66.667%}" in doc)
+    doc2, _ = build(dict(S, key_short=None, words=None, bars_per_row=None, notes=None), d,
+                    "none.html")
+    doc, _ = build(S, d, "seven.html")
+    check("an optional key set to None counts as left out", doc2 == doc)
     check("2+2+3 legend", "Each bar = 3 cells (eighths 1–2 / eighths 3–4 / eighths 5–7, widths "
           "to scale)" in doc)
     sec = lambda *spans: [(f"S{i}", b0, b1, "verse", "") for i, (b0, b1) in enumerate(spans)]
@@ -379,6 +475,32 @@ def main():
             check(name, False, "rendered")
         except ValueError as e:
             check(name, True, e)
+    for name, bad, needle in (       # optional keys: a clear ValueError naming the problem
+            ("verified as one bare pair refused", dict(S, verified=(2, 1)), "'verified'"),
+            ("verified with a text bar refused", dict(S, verified=[("2", 1)]), "'verified'"),
+            ("verified cell off the grid refused", dict(S, verified=[(9, 1)]), "(9, 1)"),
+            ("bars_per_row 2.5 refused", dict(S, bars_per_row=2.5), "'bars_per_row'"),
+            ("bars_per_row -2 refused", dict(S, bars_per_row=-2), "'bars_per_row'"),
+            ("bars_per_row True refused", dict(S, bars_per_row=True), "'bars_per_row'"),
+            ("misspelled lyric kind refused", dict(S, lyrics={(2, 1): ("Oh", "pickup")}),
+             "'pickup'"),
+            ("pickup of an unknown section kind refused",
+             dict(S, lyrics={(2, 1): ("Oh", "pk pk-pre")}), "'pk pk-pre'"),
+            ("unknown note class refused", dict(S, notes=[("Idea", "<p>x</p>", "opne")]),
+             "'opne'"),
+            ("bass note that is no note name refused", dict(S, bass_notes={(1, 1): "low A"}),
+             "bass_notes"),
+            ("title that is no text refused", dict(S, title=7), "'title'"),
+            ("duration_s as m:ss refused", dict(S, duration_s="3:20"), "'duration_s'"),
+            ("grouping with a 0 refused", dict(S, grouping=[2, 0, 5]), "'grouping'"),
+            ("no sections refused", dict(S, sections=[]), "'sections'"),
+            ("a fractional bar refused", dict(S, sections=[("Verse", 1, 6.0, "verse", "")]),
+             "whole numbers")):
+        try:
+            build(bad, d, "bad.html")
+            check(name, False, "rendered")
+        except ValueError as e:
+            check(name, needle in str(e), e)
 
     # ------------------------------------------------------------ CLI
     d = make_song([2, 2], 2.0, 8, CHORDS, EVIDENCE, t0=1.0)
@@ -388,7 +510,7 @@ def main():
     (d / "old.py").write_text("SONG = dict(title='x', artist='y', chords={}, map_harmony={},\n"
                               "            sections=[('Verse', 1, 2, 'verse', '')])\n",
                               encoding="utf-8")
-    cwd = Path(tempfile.mkdtemp(prefix="chart_html_cwd_"))
+    cwd = Path(tempfile.mkdtemp(prefix="cwd_", dir=TMP))
     run = lambda *args: subprocess.run([sys.executable, str(SCRIPTS / "chart_html.py"), *args],
                                        capture_output=True, text=True, cwd=cwd)
     r = run(str(d / "gen_v1.py"))
@@ -406,6 +528,24 @@ def main():
     r = run(str(d / "slash.py"))
     check("CLI: a / in artist or title becomes - in the default file name", r.returncode == 0
           and (d / "Left-Right - Up-Down - Chords.html").exists(), r.stderr or r.stdout)
+    for name, src, needle in (
+            ("verified as JSON-style lists renders", "verified=[[1, 1]]", None),
+            ("bars_per_row 2.5: exit 1, the reason, no traceback", "bars_per_row=2.5",
+             "bars_per_row"),
+            ("a Python error in the data file: exit 1, no traceback", "oops=missing_name",
+             "NameError")):
+        (d / "opt.py").write_text(
+            f"SONG = dict(title='Opt', artist='Nobody', chords={{(1, 1): 'C'}}, {src},\n"
+            "            sections=[('Verse', 1, 2, 'verse', '')])\n", encoding="utf-8")
+        r = run(str(d / "opt.py"), "--out", "opt.html")
+        check(f"CLI: {name}", r.returncode == 0 if needle is None else
+              r.returncode == 1 and needle in r.stderr and "Traceback" not in r.stderr,
+              r.stderr)
+    (d / "analysis" / "bass_per_cell.json").write_text('{"cells": [{"bar": 1}]}',
+                                                        encoding="utf-8")
+    r = run(str(d / "gen_v1.py"))
+    check("CLI: a malformed analysis file: exit 1, no traceback", r.returncode == 1
+          and "chart_html: KeyError" in r.stderr and "Traceback" not in r.stderr, r.stderr)
     sys.exit(1 if fails else 0)
 
 

@@ -88,7 +88,8 @@ unmatched are paired in order with Whisper's unmatched words in the same gap, by
 similarity plus the onset letter (heard best), and at a line's open ends only within a
 bar — so a misheard bridge still gets its real times. Lyric pages can
 also drop sung words ("Coming back…" sung "I'm coming back…"): `align_lyrics.py` prints
-`SUNG, NOT IN THE TEXT` for Whisper words just before a line that no lyric word took —
+`SUNG, NOT IN THE TEXT` for Whisper words just before a line that no lyric word took, and
+for a held "oh" (a vocable) right after one —
 check by ear and add them to lyrics.txt.
 
 **Older alternative (`placement: 'anchor'`)**: each phrase lives in the cell of the chord

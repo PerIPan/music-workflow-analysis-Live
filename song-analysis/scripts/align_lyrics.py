@@ -138,6 +138,37 @@ def sung_not_in_text(lines, ref_tokens, pairs, hyp, gap=1.5):
     return out
 
 
+VOCABLES = {"oh", "ohh", "ohhh", "ooh", "oooh", "ah", "ahh", "aah", "yeah", "hey", "mm", "mmm",
+            "whoa", "woah", "uh", "na", "la", "ha", "ay", "eh"}
+
+
+def sung_after(lines, pairs, hyp, before, gap=1.5):
+    """{line index: [words]} - Whisper words just after a line's last matched word (within
+    gap s, before the next line's first match) that no lyric word took and that the next
+    line doesn't claim (sung_not_in_text): the "oh" after "...up all night" that a lyrics
+    page leaves out."""
+    used = set(pairs.values())
+    spans, k = [], 0
+    for l in lines:
+        hits = [pairs[i] for i in range(k, k + len(l["words"])) if i in pairs]
+        spans.append((min(hits), max(hits)) if hits else None)
+        k += len(l["words"])
+    claimed = {w for ws in before.values() for w in ws}
+    out = {}
+    for li, sp in enumerate(spans):
+        if not sp:
+            continue
+        nxt = next((s[0] for s in spans[li + 1:] if s), len(hyp))
+        ws = [hyp[j]["word"].strip() for j in range(sp[1] + 1, nxt)
+              if j not in used and hyp[j]["start"] - hyp[sp[1]]["start"] <= gap
+              and norm(hyp[j]["word"]) in VOCABLES      # held sounds; other extras are
+                                                        # usually a misheard next line
+              and not (li + 1 in before and hyp[j]["word"].strip() in before[li + 1])]
+        if ws:
+            out[li] = ws
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--lyrics", required=True, help="canonical lyrics text")
@@ -198,6 +229,9 @@ def main():
     extra = sung_not_in_text(lines, ref_tokens, pairs, hyp)
     for li, ws in extra.items():
         out_lines[li]["sung_before"] = ws
+    after = sung_after(lines, pairs, hyp, extra)
+    for li, ws in after.items():
+        out_lines[li]["sung_after"] = ws
     secs = []
     for s in sections:
         first = out_lines[s["first_line"]]
@@ -212,6 +246,9 @@ def main():
     print(f"{len(lines)} lines, {len(sections)} sections; {len(pairs)}/{len(ref_tokens)} "
           f"canonical words matched ({len(pairs) / max(len(ref_tokens), 1):.0%}); "
           f"{len(weak)} lines under 30% matched (timing interpolated - check by ear)")
+    for li, ws in sorted(after.items()):
+        print(f"SUNG, NOT IN THE TEXT: after line {li + 1} - Whisper heard {' '.join(ws)!r} "
+              f"right after it (a held 'oh'?); if sung, add it as its own line (CHECK BY EAR)")
     for li, ws in sorted(extra.items()):
         print(f"SUNG, NOT IN THE TEXT: line {li + 1} - Whisper heard {' '.join(ws)!r} just "
               f"before it; if the singer sings it, add it to lyrics.txt (CHECK BY EAR)")

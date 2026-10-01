@@ -76,6 +76,14 @@ def main():
     extra = sung_not_in_text(lines, ref, pairs, hyp)
     check("SUNG, NOT IN THE TEXT: Whisper's 'I'm' just before 'Coming back for you', "
           "nothing before a line that starts as written", extra == {0: ["I'm"]}, extra)
+    from align_lyrics import sung_after
+    lines, _ = parse_lyrics("Up all night\nWild world\n")
+    ref = [(li, w) for li, l in enumerate(lines) for w in l["words"]]
+    hyp = [dict(word=w, start=t) for w, t in (("up", 1.0), ("all", 1.3), ("night", 1.6),
+                                              ("oh", 2.3), ("wild", 6.0), ("world", 6.4))]
+    pairs = align([w for _, w in ref], [h["word"].lower() for h in hyp])
+    check("SUNG, NOT IN THE TEXT after a line: the held 'oh' after 'Up all night'",
+          sung_after(lines, pairs, hyp, {}) == {0: ["oh"]}, sung_after(lines, pairs, hyp, {}))
     sys.exit(1 if fails else 0)
 
 

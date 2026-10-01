@@ -44,8 +44,9 @@ PRESETS = {
                3: dict(kick='four', snare='clap', hats='offbeat+16')},
         bass={1: 'root_hold', 2: 'offbeat8', 3: 'offbeat8'},
         keys={1: 'pad', 2: 'stab_off', 3: 'stab_off'}, voicing='close',
-        search=dict(drums=['909 Core Kit', '909', 'Kit'], bass=['Sub Bass', 'Bass'],
-                    keys=['Stab', 'Electric Piano', 'Piano'])),
+        search=dict(drums=['909 Core Kit', 'Memphis Studio Kit', 'Kit'],
+                    bass=['Hip-Hop Sub Bass', 'Sub Bass', 'Bass'],
+                    keys=['House Stab', 'Chord Key Stabs', 'Grand Piano', 'Piano'])),
     'synth-pop': dict(
         swing=0.5, humanize_ms=3, fills=-1, crash=1, ghosts=0, kick_run=2,
         drums={1: dict(kick='backbeat', snare='none', hats='8'),
@@ -53,7 +54,8 @@ PRESETS = {
                3: dict(kick='backbeat', snare='backbeat', hats='16')},
         bass={1: 'root_hold', 2: 'drive8', 3: 'octave8'},
         keys={1: 'pad', 2: 'pad', 3: 'arp8'}, voicing='close',
-        search=dict(drums=['808 Core Kit', '808', 'Kit'], bass=['Synth Bass', 'Bass'],
+        search=dict(drums=['808 Core Kit', 'Memphis Studio Kit', 'Kit'],
+                    bass=['Sub Species Synth Bass', 'Synth Bass', 'Bass'],
                     keys=['Pad', 'Synth', 'Piano'])),
     'lo-fi': dict(
         swing=0.58, humanize_ms=12, fills=0, crash=0, ghosts=1, kick_run=2,
@@ -62,7 +64,8 @@ PRESETS = {
                3: dict(kick='backbeat', snare='backbeat', hats='8')},
         bass={1: 'root_hold', 2: 'lofi', 3: 'lofi'},
         keys={1: 'pad', 2: 'comp', 3: 'comp'}, voicing='rootless',
-        search=dict(drums=['Kit'], bass=['Bass'], keys=['Electric Piano', 'Piano'])),
+        search=dict(drums=['Memphis Studio Kit', 'Kit'], bass=['Electric Bass Soft', 'Bass'],
+                    keys=['E-Piano Basic', 'Electric Piano', 'Piano'])),
     'garage-punk': dict(
         swing=0.5, humanize_ms=6, fills=8, crash=1, ghosts=0, kick_run=3,
         drums={1: dict(kick='backbeat', snare='backbeat', hats='8'),
@@ -70,7 +73,8 @@ PRESETS = {
                3: dict(kick='backbeat', snare='backbeat', hats='ride8')},
         bass={1: 'root_hold', 2: 'drive8', 3: 'drive8'},
         keys={1: 'block', 2: 'block', 3: 'block'}, voicing='power',
-        search=dict(drums=['Kit'], bass=['Bass'], keys=['Guitar', 'Organ'])),
+        search=dict(drums=['Memphis Studio Kit', 'Kit'], bass=['Electric Bass Raw', 'Bass'],
+                    keys=['Clean Basic Guitar', 'Guitar', 'Organ'])),
     'as-analysed': dict(
         swing=0.5, humanize_ms=0, fills=0, crash=0, ghosts=0, kick_run=2,
         drums={1: dict(kick='sparse', snare='none', hats='tactus'),
@@ -78,7 +82,8 @@ PRESETS = {
                3: dict(kick='backbeat', snare='backbeat', hats='8')},
         bass={1: 'as-analysed', 2: 'as-analysed', 3: 'as-analysed'},
         keys={1: 'block', 2: 'block', 3: 'block'}, voicing='close',
-        search=dict(drums=['Kit'], bass=['Bass'], keys=['Piano'])),
+        search=dict(drums=['Memphis Studio Kit', 'Kit'], bass=['Electric Bass', 'Bass'],
+                    keys=['Grand Piano', 'Ac Piano Upright', 'Piano'])),
 }
 OPTIONS = {'drums.kick': ('four', 'backbeat', 'sparse'),
            'drums.snare': ('backbeat', 'clap', 'half', 'none'),

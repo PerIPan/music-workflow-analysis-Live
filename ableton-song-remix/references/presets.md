@@ -26,7 +26,12 @@ the new ones stop.
   up to 130 BPM, 8ths above, hands alternating.
 - 16th hats fall back to 8ths above 130 BPM (one hand can't keep 16ths there).
 - The instrument search tries `search` names in order (drums in the `drums` category, bass
-  and keys in `sounds`); edit the preset to match the user's library.
+  and keys in `sounds`); edit the preset to match the user's library. Live matches a query
+  anywhere in a name ('Kit' finds the sample `FX Funkit.wav`, 'Piano' finds `Piano Bass`), so
+  the build loads drums only as a Drum Rack (`.adg`), never a raw sample, bass only from
+  Live's Bass folder and keys never from it, the exact name first. Hence full preset names.
+- Drums: **Memphis Studio Kit** (a free Core Library add-on: Live → Packs) first for
+  every acoustic-style preset; house and synth-pop try the 909 / 808 Core Kit before it.
 
 ## `--set` knobs (remix_parts.py)
 

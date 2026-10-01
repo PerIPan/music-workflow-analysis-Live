@@ -38,7 +38,33 @@ from remix_parts import plan_key  # noqa: E402
 ADDR = ('127.0.0.1', int(os.environ.get('LIVE_PORT', 9877)))      # override for tests
 CHUNK = 300
 POLL_S = float(os.environ.get('REMIX_POLL_S', 1.0))
+WARP_TRIES = 3                  # Live's Auto-Warp can land mid-build: clear and warp again
 SLICE_W = 0.05                  # beats: a note this close before a section start belongs to it
+
+
+SAMPLE_EXT = ('.wav', '.aif', '.aiff', '.flac', '.mp3', '.ogg')
+BASS_DIR, KEYS_DIR = 'Sounds#Bass', 'Sounds#Piano%20&%20Keys'
+
+
+def pick(part: str, query: str, results: list) -> dict | None:
+    """The instrument to load for a part from one browser search. Live matches the query
+    anywhere in a name, so in Live 12.4 'Kit' first finds a drum sample ('FX Funkit.wav')
+    and 'Piano' a bass ('Piano Bass.adv'). Never a raw sample; drums only a Drum Rack
+    (.adg); bass only from the Bass folder, keys never from it. Ranked: the exact name,
+    then (keys) the Piano & Keys folder, then the browser's order."""
+    ok = []
+    for x in results:
+        n, u = x.get('name', '').lower(), x.get('uri', '')
+        if not (x.get('is_loadable') and u) or n.endswith(SAMPLE_EXT):
+            continue
+        if part == 'drums' and not n.endswith('.adg'):
+            continue
+        if (part == 'bass') != (BASS_DIR in u) and part in ('bass', 'keys'):
+            continue
+        ok.append(x)
+    rank = lambda x: (x['name'].rsplit('.', 1)[0].lower() != query.lower(),
+                      part == 'keys' and KEYS_DIR not in x['uri'])
+    return min(ok, key=rank) if ok else None
 
 
 class Failed(Exception):
@@ -107,9 +133,10 @@ class Sim:
         if cmd == 'create_scene':
             self.scenes += 1
             return {'index': self.scenes - 1}
-        if cmd == 'search_browser':
-            return {'results': [{'name': p['query'], 'uri': f"query:{p['query']}",
-                                 'is_loadable': True}]}
+        if cmd == 'search_browser':                 # one hit per folder pick() tells apart
+            return {'results': [{'name': f"{p['query']}.adg", 'is_loadable': True,
+                                 'uri': f"query:{d}:{p['query']}"}
+                                for d in (BASS_DIR, KEYS_DIR)]}
         if cmd == 'get_track_info':
             return {'devices': [{'name': 'instrument'}], 'clip_slots': []}
         if cmd == 'get_clip_info':
@@ -213,7 +240,7 @@ class Builder:
         cat = 'drums' if part == 'drums' else 'sounds'
         for q in self.parts.get('search', {}).get(part, []):
             res = self('search_browser', query=q, category=cat).get('results', [])
-            item = next((x for x in res if x.get('is_loadable') and x.get('uri')), None)
+            item = pick(part, q, res)
             if not item:
                 continue
             r = self.raw('load_browser_item', track_index=track, item_uri=item['uri'])
@@ -342,7 +369,21 @@ class Builder:
 
     def warp(self, track: int, slot: int) -> list:
         """Replace Live's warp markers with the plan's: one per downbeat. Returns the
-        markers the clip must now hold, as (sample seconds, beat)."""
+        markers the clip must now hold, as (sample seconds, beat). Auto-Warp Long Samples
+        can add its own markers after the clip looked settled (seen in Live 12.4 on a 6-min
+        file): a refused marker or a failed read-back clears the clip and warps it again."""
+        for n in range(1, WARP_TRIES + 1):
+            try:
+                return self.warp_once(track, slot)
+            except Failed as e:
+                if self.dry or n == WARP_TRIES:
+                    raise
+                self.warnings.append(f'track {track}: warp try {n} failed, Live changed the '
+                                     f'markers (Auto-Warp?); cleared and warped again: '
+                                     f'{str(e)[:160]}')
+                time.sleep(POLL_S * 3)
+
+    def warp_once(self, track: int, slot: int) -> list:
         ms = self.settle(track, slot)
         vis = ms[:-1] if len(ms) > 1 else ms              # the last one is hidden
         for m in reversed(vis[1:]):

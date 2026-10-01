@@ -30,9 +30,10 @@ Builds a Live Session from a song that `song-analysis` has finished:
    `set_clip_warping`, a working `add_warp_marker`). After patching, restart Live.
    `remix_build.py` stops with exit 3 before writing anything if the patch isn't loaded.
 3. **A new, empty Set.** A Set with clips or named scenes is refused (exit 2); `--force`
-   appends.
-4. **Auto-Warp Long Samples off** (Live Settings → Record, Warp & Launch) before the
-   build: Live's own markers otherwise block the downbeat markers.
+   appends. Ask for this and step 4 in one message, right before the build.
+4. **Auto-Warp Long Samples off** (Live Settings → Record, Warp & Launch) — ask the user
+   before the build. Left on, Live adds its own markers seconds after the load; the build
+   then clears them and warps the stem again (up to 3 tries, a warning each), which is slower.
 
 ## Ask first (one message; defaults in brackets)
 

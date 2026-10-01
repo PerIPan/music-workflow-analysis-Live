@@ -6,8 +6,9 @@ back before any clip, the tempo read back, tracks named, the FULL + section scen
 MIDI clips pushed in chunks, each stem loaded, warped (a separate command after the load),
 its markers replaced by one per downbeat (the first moved onto the grid, the rest added in
 order) and read back, looped to the song, and copied per section with the section's loop.
-Live's first marker past sample 0 (Auto-Warp) still gets every downbeat; a stray marker
-between downbeats fails the read-back; a file still decoding is waited for; a FULL
+Live's first marker past sample 0 (Auto-Warp) still gets every downbeat; markers Live adds
+mid-build (a late stray, a whole late Auto-Warp) are cleared and the stem warped again, up
+to 3 tries; a file still decoding is waited for; a FULL
 loop_start Live clamped is a warning; a section clip keeps a downbeat note humanized just
 before the section; parts.json from an older plan is refused.
 Refusals: an unpatched Remote Script exits 3 before any write; a Set with clips exits 2
@@ -32,9 +33,10 @@ class MockLive:
     """Enough of the patched Remote Script: tracks, scenes, clips, notes, warp markers."""
 
     def __init__(self, patched=True, swallow=(), fail_on=None, clips_on_track=False,
-                 first_at=0.0, inject=False, decode_reads=0, clamp=False):
+                 first_at=0.0, inject=False, decode_reads=0, clamp=False, autowarp=False):
         self.patched, self.swallow, self.fail_on = patched, set(swallow), fail_on
         self.first_at, self.inject, self.clamp = first_at, inject, clamp
+        self.autowarp = autowarp                  # Auto-Warp lands after the first add
         self.decode_reads = decode_reads          # get_clip_info reads with sample_length 0
         self.calls, self.tempo, self.sig = [], 120.0, (4, 4)
         self.scenes = [''] * 8
@@ -110,8 +112,18 @@ class MockLive:
         if t == 'set_track_mute':
             self.tracks[p['track_index']]['mute'] = p['mute']
             return {}
-        if t == 'search_browser':
-            return {'results': [{'name': p['query'] + ' Kit', 'uri': 'uri:' + p['query'],
+        if t == 'search_browser':     # as Live 12.4: a sample or another folder's hit first
+            q = p['query']
+            if p['category'] == 'audio_effects':
+                return {'results': [{'name': q, 'uri': 'uri:' + q, 'is_loadable': True}]}
+            if p['category'] == 'drums':
+                return {'results': [{'name': f'FX {q}.wav', 'uri': 'query:Drums#Hits:1',
+                                     'is_loadable': True},
+                                    {'name': f'{q}.adg', 'uri': 'query:Drums#kit',
+                                     'is_loadable': True}]}
+            return {'results': [{'name': f'{q} Bass.adv', 'uri': 'query:Sounds#Bass:bass',
+                                 'is_loadable': True},
+                                {'name': f'{q}.adg', 'uri': 'query:Sounds#Piano%20&%20Keys:keys',
                                  'is_loadable': True}]}
         if t == 'set_track_output_routing':
             names = [x['name'] for x in self.tracks]
@@ -203,6 +215,8 @@ class MockLive:
             c = self.clip(p)
             b, s = p['beat_time'], p['sample_time']
             ms = c['markers']
+            if any(abs(m[0] - b) < 1e-9 for m in ms[:-1]):
+                raise ValueError('Segment length out of range.')
             left = [m for m in ms if m[0] < b - 1e-9]
             right = [m for m in ms if m[0] > b + 1e-9]
             if (left and left[-1][1] >= s) or (right and right[0][1] <= s and
@@ -215,6 +229,14 @@ class MockLive:
             last = ms[-1]
             slope = (last[0] - ms[-2][0]) / (last[1] - ms[-2][1]) if len(ms) > 1 else 1
             ms.append([last[0] + (hidden[1] - last[1]) * slope, hidden[1]])
+            if self.autowarp and not c.get('autowarped'):
+                # as in Live 12.4: Auto-Warp finishes late and adds a marker every 4 beats
+                # beside the build's own, a little off the plan's downbeats
+                (ba, sa), (bh, sh) = ms[-2], ms[-1]
+                auto = [[k, sa + (k - ba) * (sh - sa) / (bh - ba) - 0.01]
+                        for k in range(int(ba) + 4, int(bh), 4) if k > ba]
+                ms[-1:-1] = auto
+                c['autowarped'] = True
             return {}
         if t == 'set_clip_loop':
             c = self.clip(p)
@@ -311,6 +333,14 @@ def main():
           sec['looping'] and sec['ls'] == 12.0 and sec['le'] == 36.0 and sec['start'] == 12.0,
           (sec.get('ls'), sec.get('le')))
     check('build_report.json written', (plan_p.parent / 'build_report.json').is_file())
+    rep = json.loads((plan_p.parent / 'build_report.json').read_text())
+    devs = {x['name']: [d['name'] for d in x['devices']] for x in m.tracks}
+    loaded = {p: next((n for t2, ns in devs.items() if t2.startswith(p.upper()) for n in ns), '')
+              for p in ('drums', 'bass', 'keys')}
+    check('instruments: a Drum Rack (never a sample), bass from Bass, keys not from Bass',
+          loaded == {'drums': 'query:Drums#kit', 'bass': 'query:Sounds#Bass:bass',
+                     'keys': 'query:Sounds#Piano%20&%20Keys:keys'}
+          and rep['instruments'].get('drums') == 'Memphis Studio Kit.adg', (loaded, rep.get('instruments')))
     check('the stock-fork traps are never sent',
           not {'create_locator', 'delete_locator'} & set(types))
 
@@ -340,10 +370,23 @@ def main():
                if (round(x[1], 3), round(x[0], 3)) not in got]
     check("Live's first marker at 5 s: the downbeats before it get markers too",
           r.returncode == 0 and not missing, (r.stdout[-300:], missing[:3]))
+    def exact(m):                                  # the plan's markers, nothing else visible
+        vis = m.tracks[0]['slots'][0]['markers'][:-1] if m.tracks else []
+        want = sorted((round(b, 3), round(s, 3)) for s, b in plan_on['warp']['markers'])
+        return sorted((round(b, 3), round(s, 3)) for b, s in vis) == want
     m = MockLive(inject=True)
     r = run('remix_build.py', p_on, port=m.port)
-    check('a stray marker between downbeats fails the read-back (exit 1)',
-          r.returncode == 1 and 'extra' in r.stdout, r.stdout[-300:])
+    check('a late stray marker: the stem is cleared and warped again (warning)',
+          r.returncode == 0 and 'warp try 1' in r.stdout and exact(m), r.stdout[-300:])
+    m = MockLive(autowarp=True)
+    r = run('remix_build.py', p_on, port=m.port)
+    check('Auto-Warp adding markers mid-build: cleared, every downbeat set, no extras',
+          r.returncode == 0 and exact(m), r.stdout[-300:])
+    m = MockLive(fail_on=lambda msg, n: msg['type'] == 'add_warp_marker')
+    r = run('remix_build.py', p_on, port=m.port)
+    tries = sum(c['type'] == 'add_warp_marker' for c in m.calls)
+    check('a marker Live keeps refusing: 3 tries, then exit 1',
+          r.returncode == 1 and tries == 3, (tries, r.stdout[-300:]))
     m = MockLive(decode_reads=3)
     r = run('remix_build.py', p_on, port=m.port)
     first_edit = next((i for i, c in enumerate(m.calls) if c['type'] in
@@ -359,7 +402,23 @@ def main():
     # section clips: a downbeat humanized a hair early stays in its own section
     sys.path.insert(0, str(SCRIPTS))
     import contextlib, io
-    from remix_build import Builder
+    from remix_build import Builder, pick
+    L = lambda n, u: {'name': n, 'uri': 'query:' + u, 'is_loadable': True}
+    kit = [L('FX Funkit.wav', 'Drums#Drum%20Hits:FX%20Hit:1'), L('Kick Analog Skitter.aif', 'Drums#Drum%20Hits:2')]
+    piano = [L('Piano Bass.adv', 'Sounds#Bass:3'), L('Thumb Piano Tiny.adg', 'Sounds#Guitar%20&%20Plucked:4'),
+             {'name': 'Piano & Keys', 'uri': 'query:Sounds#Piano%20&%20Keys', 'is_loadable': False},
+             L('Ac Piano Upright.adg', 'Sounds#Piano%20&%20Keys:5')]
+    grand = [L('Grand Piano Single Sample.adv', 'Sounds#Piano%20&%20Keys:6'),
+             L('Grand Piano.adg', 'Sounds#Piano%20&%20Keys:7')]
+    organ = [L('Organ Incoming.adg', 'Sounds#Ambient:8'), L('Basic Organ Bass.adg', 'Sounds#Bass:9')]
+    check("pick: 'Kit' finding only samples loads nothing (next name is tried)",
+          pick('drums', 'Kit', kit) is None)
+    check("pick: 'Piano' for keys skips 'Piano Bass', prefers the Piano & Keys folder",
+          pick('keys', 'Piano', piano)['name'] == 'Ac Piano Upright.adg')
+    check("pick: 'Piano' for bass takes 'Piano Bass'", pick('bass', 'Piano', piano)['name'] == 'Piano Bass.adv')
+    check('pick: the exact name wins', pick('keys', 'Grand Piano', grand)['name'] == 'Grand Piano.adg')
+    check("pick: 'Organ' for bass only from the Bass folder",
+          pick('bass', 'Organ', organ)['name'] == 'Basic Organ Bass.adg')
     parts_on = json.loads((p_on.parent / 'parts.json').read_text())
     a = plan_on['sections'][1]['start_beat']
     fake = dict(parts_on, parts={'drums': [

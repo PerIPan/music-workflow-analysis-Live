@@ -178,9 +178,12 @@ def main():
     check("4/4 legend wording", "Each bar = 2 half-cells (beats 1–2 / beats 3–4); a thick line "
           "ends the bar." in doc and "this half-bar's own reading" in doc)
     check("short rows keep cell width (1 bar, 3 bars)",
-          '<span class="row-meta">bar 1</span>' in doc and doc.count('class="bars cols-2"') == 1
+          '<span class="row-meta">bar 1 · ' in doc and doc.count('class="bars cols-2"') == 1
           and doc.count('class="bars cols-6"') == 1
           and ".bars.cols-6{grid-template-columns:repeat(6,minmax(0,1fr));max-width:75%}" in doc)
+    check("a section's first row shows where it starts in the recording (m:ss); later rows "
+          "only their bars", re.search(r'row-meta">bar 1 · \d+:\d\d<', doc) is not None and
+          not re.search(r'row-sec">[^<]*</span><span class="row-meta">[^<]*·', doc))
     check("columns can't grow with a wide label (minmax(0, 1fr) tracks)",
           ".bars{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));" in doc)
     check("2-cell shading", ".half:nth-child(4n+1),.half:nth-child(4n+2){background:#fbfbf8}"
@@ -423,10 +426,12 @@ def main():
           and ".bars.cols-1{grid-template-columns:repeat(1,minmax(0,1fr));max-width:12.5%}"
           in doc and doc.count('class="bars cols-2"') == 1
           and doc.count('class="bars cols-1"') == 1)
-    check("a section's later rows name it for print only, its first row doesn't",
-          doc.count('class="row-name row-sec"') == 1 and '<span class="row-name row-sec">Verse'
-          '</span><span class="row-meta">bars 9–10</span>' in doc
-          and ".row-sec{display:none}" in doc and " .row-sec{display:inline;" in doc)
+    check("a section's later rows show their bars, its name only on the first row (also in "
+          "print); 'repeat_sections' prints it on every row",
+          doc.count('class="row-name row-sec"') == 1 and '<span class="row-meta">bars 9–10</span>'
+          in doc and ".row-sec{display:none}" in doc and ".row-sec{display:inline" not in doc
+          and "@media print{.row-sec{display:inline" in build(dict(S, repeat_sections=True), d,
+                                                               "repeat.html")[0])
     check("1-cell shading", ".half:nth-child(2n+1){background:#fbfbf8}" in doc)
     check("3/4: words by bar", L[(2, 1)] == "Waltz along the" and L[(3, 1)] == "river bend",
           (L[(2, 1)], L[(3, 1)]))

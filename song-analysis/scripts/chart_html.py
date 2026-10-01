@@ -19,8 +19,8 @@ marked: on real songs they flagged 20-50% of cells, mostly sus/add9 voicings. A 
 lv-chordia chord covers under half of it (a change inside) gets a dashed underline.
 Evidence made on another grid, or with another grouping, is warned about. Columns keep
 their share of the row whatever the labels: a label too wide for its cell (a phone, print)
-shrinks to fit, next to room kept for a "?"; in print a row that is not a section's first
-repeats the section name, and the song map's meters print without background graphics.
+shrinks to fit, next to room kept for a "?"; a section's name prints on its first row only
+('repeat_sections' puts it on every row), and the song map's meters print without background graphics.
 
 Usage (python3, standard library only):
     chart_html.py <song>/gen_v1.py [--out PATH]     # default <folder>/<out>
@@ -72,6 +72,8 @@ kind or a Harte chord label is refused with the reason.
                     [{"word", "start"}, ...]}); without it, or with no words in it, every
                     line stays whole at its anchor
     bass_notes      {(bar, cell): 'A'}: bass note printed as (A) on a label with no slash
+    repeat_sections True: print a section's name on each of its rows (default: only on
+                    its first row; later rows show their bars)
     stops           [(bar, cell), ...] the player calls a stop besides the measured ones
                     (a chord left ringing from the bar before): greyed
     placement       'sung' (default): each word in the cell where it is sung, pushes kept;
@@ -453,7 +455,7 @@ def cell_html(S: dict, key: tuple, bar_end: bool, flagged: set, split: set, lyr:
 
 
 def rows_html(S: dict, n: int, per_row: int, flagged: set, split: set, lyr: dict,
-              over: dict, stops: frozenset = frozenset()) -> str:
+              over: dict, stops: frozenset = frozenset(), db: list | None = None) -> str:
     out = []
     for name, b0, b1, kind, note, *_ in S['sections']:
         bars = list(range(b0, b1 + 1))
@@ -463,6 +465,8 @@ def rows_html(S: dict, n: int, per_row: int, flagged: set, split: set, lyr: dict
             cells = ''.join(cell_html(S, (b, c), c == n, flagged, split, lyr, over, stops)
                             for b in chunk for c in range(1, n + 1))
             rng = f'bar {chunk[0]}' if len(chunk) == 1 else f'bars {chunk[0]}–{chunk[-1]}'
+            if start and db and b0 - 1 < len(db):      # where the section starts in the record
+                rng += f' · {mmss(db[b0 - 1])}'
             head = (f'<span class="row-name">{esc(name)}</span><span class="row-meta">{rng}</span>'
                     f'<span class="row-note">{note}</span>' if start else     # name: print only
                     f'<span class="row-name row-sec">{esc(name)}</span>'
@@ -605,7 +609,6 @@ td.sn.bridge{color:#5b9a52} td.sn.post{color:#b58632} td.sn.intro,td.sn.outro,td
  .row.section-start{margin-top:.4em;padding-top:.25em}
  .row-meta,.row-note,.row.inst .row-name,.row.outro .row-name,.row.intro .row-name{color:#666}
  .row.post .row-name{color:#8f6420}.row.bridge .row-name{color:#437a3b}
- .row-sec{display:inline;font-size:.7em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;line-height:1}
  .half{min-height:3.4em;padding:.3em .35em;--cap:1.55rem}.chord{font-size:1.55em}.lyric{font-size:.62em}
  .note-block{font-size:.7em;padding:.4em .55em}
  @page{size:A4 portrait;margin:.35in}}
@@ -614,7 +617,7 @@ SPLIT_CSS = ('.half.split .chord{text-decoration:underline dashed #b58632;'
              'text-decoration-thickness:2px;text-underline-offset:.14em}')
 ADLIB_CSS = '.lyric .adlib{color:#aaa;margin-left:.45em}'
 KEYS = {'title', 'artist', 'sections', 'chords', 'folder', 'out', 'key_short', 'lyrics',
-        'words', 'bass_notes', 'verified', 'placement', 'stops', 'grouping', 'bars_per_row', 'duration_s', 'subline',
+        'words', 'bass_notes', 'verified', 'placement', 'stops', 'repeat_sections', 'grouping', 'bars_per_row', 'duration_s', 'subline',
         'facts', 'provenance', 'map_note', 'notes', 'method'}
 KINDS = ('intro', 'verse', 'post', 'chorus', 'bridge', 'inst', 'outro')
 LYRIC_KINDS = ('', 'adlib', 'fixed', *(f'pk pk-{k}' for k in KINDS))
@@ -817,6 +820,9 @@ def render(S: dict, out: str | Path | None = None) -> Path:
              if any(p in kind.split() for _, kind in over.values())]
     if split:
         extra.append(SPLIT_CSS)
+    if S.get('repeat_sections'):        # print a section's name on each of its rows
+        extra.append('@media print{.row-sec{display:inline;font-size:.7em;font-weight:700;'
+                     'text-transform:uppercase;letter-spacing:.05em;line-height:1}}')
     if any(kind == 'adlib' and k in lyr for k, (_, kind) in over.items()):
         extra.append(ADLIB_CSS)
     css = (CSS.replace('@GRID@\n', grid_rules).replace('@SHADE@\n', shade)
@@ -869,7 +875,7 @@ def render(S: dict, out: str | Path | None = None) -> Path:
 <style>{css}</style></head><body>
 <h1>{name}{key}</h1>
 {top}<div class="chart">
-{rows_html(S, grid.n, per_row, flagged, split, lyr, over, stops)}
+{rows_html(S, grid.n, per_row, flagged, split, lyr, over, stops, grid.db)}
 </div>
 <section class="notes">
 <h2>Song map</h2>

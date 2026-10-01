@@ -110,6 +110,11 @@ sung:    [A♭] "Pickup words here,"        |[E♭] "and the phrase"     [A♭] 
 anchor:  [A♭]                              |[E♭] "Pickup words here, / and the phrase"  [A♭] "ends"
 ```
 
+**Rows.** A section's first row carries its name, its bars and where it starts in the
+recording ("VERSE 1  bars 5–8 · 0:08") so the band can find it; later rows show only
+their bars (a player asked not to repeat the section names in print —
+`repeat_sections: True` brings them back).
+
 **Stops.** Where the band drops out under the voice (a stop-time break), the chord stays
 (it shows where the loop is) but is greyed, half-bar by half-bar — the band often plays
 the first half and stops for the second ("Gotta | feel your body heat": a player first

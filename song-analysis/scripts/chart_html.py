@@ -72,6 +72,8 @@ kind or a Harte chord label is refused with the reason.
                     [{"word", "start"}, ...]}); without it, or with no words in it, every
                     line stays whole at its anchor
     bass_notes      {(bar, cell): 'A'}: bass note printed as (A) on a label with no slash
+    stops           [(bar, cell), ...] the player calls a stop besides the measured ones
+                    (a chord left ringing from the bar before): greyed
     placement       'sung' (default): each word in the cell where it is sung, pushes kept;
                     'anchor': words sung before a line's anchor are pulled into it
     verified        [(bar, cell), ...] a player confirmed (JSON-style [bar, cell] lists do
@@ -603,7 +605,7 @@ SPLIT_CSS = ('.half.split .chord{text-decoration:underline dashed #b58632;'
              'text-decoration-thickness:2px;text-underline-offset:.14em}')
 ADLIB_CSS = '.lyric .adlib{color:#aaa;margin-left:.45em}'
 KEYS = {'title', 'artist', 'sections', 'chords', 'folder', 'out', 'key_short', 'lyrics',
-        'words', 'bass_notes', 'verified', 'placement', 'grouping', 'bars_per_row', 'duration_s', 'subline',
+        'words', 'bass_notes', 'verified', 'placement', 'stops', 'grouping', 'bars_per_row', 'duration_s', 'subline',
         'facts', 'provenance', 'map_note', 'notes', 'method'}
 KINDS = ('intro', 'verse', 'post', 'chorus', 'bridge', 'inst', 'outro')
 LYRIC_KINDS = ('', 'adlib', 'fixed', *(f'pk pk-{k}' for k in KINDS))
@@ -775,6 +777,7 @@ def render(S: dict, out: str | Path | None = None) -> Path:
     bl = rd('band_level.json') if (a / 'band_level.json').exists() else {}
     out_cells = {(b, k) for b, k, v in bl.get('cells', []) if v < STOP
                  and bl.get('grouping') in (None, grouping)}
+    out_cells |= {tuple(k) for k in S.get('stops', ())}       # the player's own stops
     stops = frozenset(k for k in out_cells                    # the half-bars the band is out
                       if S['chords'].get(k) not in (None, 'N.C.'))
     stop_bars = {b for b, _ in out_cells}

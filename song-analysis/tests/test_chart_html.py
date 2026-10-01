@@ -648,6 +648,12 @@ def main():
     check("no '?' in a stop bar (nothing to read: the chart keeps the loop); elsewhere it stays",
           "q" not in C[(1, 2)][0].split() and "q" in C[(3, 2)][0].split(),
           (C[(1, 2)][0], C[(3, 2)][0]))
+    doc, cells = build(dict(title="Stops", artist="Nobody", chords=ch, stops=[(2, 1)],
+                            sections=[("Verse", 1, 4, "verse", "")]), make_song([2, 2], 2.0, 4, ch),
+                       "ownstops.html")
+    C = at(cells, 2)
+    check("'stops': a half-bar the player calls a stop is greyed without band_level.json",
+          [k for k, v in C.items() if "stop" in v[0].split()] == [(2, 1)] and "Grey chord" in doc)
     check("no band_level.json: no stops, no legend line", "Grey chord" not in doc and
           'class="half stop' not in doc)
     sys.exit(1 if fails else 0)

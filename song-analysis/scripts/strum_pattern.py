@@ -7,7 +7,8 @@ other.wav mixes guitars with keys and pads). Each onset is snapped to the neares
 its bar (bar-relative, through the downbeats, so tempo drift doesn't smear the grid); a
 section's pattern is the steps hit in at least half of its bars (--min-share), with the
 mean strength per step as the accent. `onsets` keeps every strum's real time and strength
-(the remix sketch plays those). Stroke directions are the hand-motion convention
+(the remix sketch plays those). Under 4 onsets per bar the guitar holds its chords (a
+ringing, reverb-heavy part): no pattern is printed for that section. Stroke directions are the hand-motion convention
 (down on the 8ths, up on the 16ths between: the hand keeps moving), not measured.
 
 Usage (analysis venv: librosa, numpy):
@@ -128,7 +129,10 @@ def main() -> None:
     for sec in secs:
         sm = summarise(bars[sec['first_bar'] - 1:sec['last_bar']], a.min_share)
         out.append(dict(sec, **sm))
-        if sm['bars']:
+        if sm['bars'] and sm['onsets_per_bar'] < 4:
+            print(f"{sec['name'][:10]:10} {sec['first_bar']:>3}-{sec['last_bar']:<3}"
+                  f"held, few attacks ({sm['onsets_per_bar']}/bar): no strum pattern to read")
+        elif sm['bars']:
             print(f"{sec['name'][:10]:10} {sec['first_bar']:>3}-{sec['last_bar']:<3}"
                   f"{' '.join(sm['strokes'])}   ({sm['onsets_per_bar']}/bar)")
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)

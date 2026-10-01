@@ -10,7 +10,8 @@ velocity comes from the stem's peak in that class's band around the hit, scaled 
 (a ghost snare stays quiet next to a backbeat). ADTOF's cymbal class mixes crash and
 ride: a cymbal hit in the loudest fifth, on a downbeat or a beat after the previous cymbal
 hit, is a crash (49); the rest ride (51).
-A bar with toms, or with twice the median hit count in its last beat, is a fill.
+A fill bar: any tom when toms are rare; when they are part of the groove (in more than a
+quarter of the bars), twice the usual tom bar; or a crowded last beat.
 
 Times stay in seconds of the stem (= the mix); the remix plan maps them to Live beats.
 GM pitches: kick 36, snare 38, closed hat 42, toms 48/45/43 (high/mid/low by pitch),
@@ -99,7 +100,9 @@ def tom_pitches(y: np.ndarray, sr: int, times: list[float]) -> list[int]:
 
 
 def fills(hits: list[dict], downbeats: list[float], beats_per_bar: int) -> list[int]:
-    """1-based bars with a tom, or with twice the median hit count in their last beat."""
+    """1-based fill bars. Toms in a quarter of the drum bars or fewer: any tom. Toms as part
+    of the groove (a surf or tom-tom beat): twice the usual tom bar's count. Or a crowded
+    last beat (2x the median and 3 more hits)."""
     n = len(downbeats) - 1
     tom = [0] * n
     last = [0] * n
@@ -114,7 +117,12 @@ def fills(hits: list[dict], downbeats: list[float], beats_per_bar: int) -> list[
             last[b] += 1
     played = sorted(x for x in last if x)
     med = played[len(played) // 2] if played else 0
-    return [b + 1 for b in range(n) if tom[b] or (med and last[b] >= 2 * med)]
+    busy = [b for b in range(n) if last[b] or tom[b]]
+    with_tom = sorted(tom[b] for b in busy if tom[b])
+    groove = len(with_tom) > 0.25 * max(len(busy), 1)    # toms are part of the beat
+    need = 2 * with_tom[len(with_tom) // 2] if groove and with_tom else 1
+    crowd = max(2 * med, med + 3)
+    return [b + 1 for b in range(n) if tom[b] >= need or (med and last[b] >= crowd)]
 
 
 def main() -> None:

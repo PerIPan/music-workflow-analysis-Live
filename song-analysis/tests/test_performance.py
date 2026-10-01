@@ -6,7 +6,8 @@ bar-relative 16th through the downbeats (tempo drift doesn't smear it); one a ha
 the next downbeat counts as that bar's step 0; weak onsets are ignored; a section's pattern
 is the steps hit in half its bars, strokes D on 8ths and U between; plan.json sections.
 drum_transcribe.py: velocities per class (a ghost snare stays quiet next to a backbeat);
-fill bars = a tom, or twice the median hits in the last beat.
+fill bars = twice the usual toms (a tom-groove drummer's every-bar tom isn't a
+fill), or twice the median hits in the last beat.
 Run: <analysis venv>/bin/python song-analysis/tests/test_performance.py   (numpy)
 """
 import json, sys, tempfile
@@ -62,6 +63,10 @@ check('velocities per class: the loud snares ~120, a ghost snare 20 dB down quie
 hits = [dict(t=x, pitch=36) for x in (0.0, 2.0, 4.0, 6.0)] + \
     [dict(t=1.6, pitch=38), dict(t=3.6, pitch=38), dict(t=5.6, pitch=38)] + \
     [dict(t=7.5 + 0.1 * k, pitch=38) for k in range(5)] + [dict(t=3.7, pitch=45)]
+groove = [dict(t=b * 2.0 + 0.5 + 0.2 * k, pitch=45) for b in range(3) for k in range(2)] + \
+    [dict(t=6.0 + 0.3 * k, pitch=45) for k in range(4)]
+check('tom-groove drummer: two toms every bar are the groove; the bar with four is the fill', fills(groove, [0.0, 2.0, 4.0, 6.0, 8.0], 4) == [4],
+      fills(groove, [0.0, 2.0, 4.0, 6.0, 8.0], 4))
 check('fill bars: a tom (bar 2), twice the median hits in the last beat (bar 4)',
       fills(hits, [0.0, 2.0, 4.0, 6.0, 8.0], 4) == [2, 4], fills(hits, [0, 2, 4, 6, 8], 4))
 sys.exit(1 if fails else 0)

@@ -27,13 +27,15 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
    (opt-in; the user confirms the pick before anything is downloaded).
 2. **Lyrics** — canonical text from an official source. Section labels (Verse, Chorus,
    Bridge…) come from this, not from the analyzer. **Not supplied? Get them before
-   Phase 1** — Phase 6 needs them and a late search stalls the run. Search and
-   page-summary tools won't reproduce lyrics: fetch the page HTML (curl with a browser
-   User-Agent) and parse the lyric lines; if a site blocks scripted requests, try another
-   (e.g. songlyrics.com, lyricsondemand.com). Some pages put a blank line after every line:
-   strip those, or every line becomes a section. Such text is unofficial: say so in the
-   provenance. Whisper only times it (Phase 6); don't use Whisper's text as the lyrics
-   unless no page has the song.
+   Phase 1** — Phase 6 needs them and a late search stalls the run.
+   `scripts/lyrics_from_page.py <URL> --out lyrics.txt --chords-out analysis/tab_chords.json`
+   moves a lyrics or chord-tab page's text into the song folder and prints only counts.
+   **Never retype lyrics through your own output** — copyrighted text is blocked
+   ("Output blocked by content filtering policy") and search tools won't reproduce it
+   either. If a site answers 403/404, search for another (songlyrics.com,
+   lyricsondemand.com, the band's Bandcamp, a chord-tab site). Such text is unofficial:
+   say so in the provenance. Whisper only times it (Phase 6); use Whisper's text as the
+   lyrics only when no page has the song.
 
 ## Tool per step
 
@@ -47,7 +49,7 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
 | 4b Performance | **`scripts/drum_transcribe.py`** (ADTOF) + **`scripts/strum_pattern.py`** | `drum_hits.json`, `drums.mid`, `strum.json` |
 | 5 Lyrics | **`scripts/whisper_gated.py`** (gated by the vocal stem; stem and mix) | `lyrics.json`, `lyrics_mix.json` |
 | 6 Sections | **`scripts/align_lyrics.py`** (canonical lyrics ↔ word times) | `lyrics_aligned.json`, `sections.json` |
-| 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`** | `chords_lv.json`, `chord_proposal.json` |
+| 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`**, then **`scripts/tab_compare.py`** | `chords_lv.json`, `chord_proposal.json` |
 | 8 Chart | **`scripts/stem_activity.py`** → **`scripts/chart_html.py`** (per-song data file) | `stem_activity.json`, self-contained **HTML** chart |
 
 `<venv>` = the analysis venv; Whisper, lv-chordia and yt-dlp have their own
@@ -238,9 +240,11 @@ for sharp keys — in F♯ minor a flat table writes the tonic `G♭m` and the d
 
 A chart says which chord; a band (and a Live sketch) also needs **how** it's played.
 `drum_transcribe.py` labels every hit (ADTOF: kick, snare, hat, toms, cymbals; the stem
-is peak-normalised first) with a velocity from the stem, and lists the **fill bars** (a
-tom, or a crowded last beat) — on the first test song they sat on the bars before section
-changes. It can't tell crash from ride well (one cymbal class). `strum_pattern.py` snaps the
+is peak-normalised first) with a velocity from the stem, and lists the **fill bars** — a
+tom when toms are rare; twice the usual tom bar when the drummer grooves on the toms (a
+surf beat put toms in half the bars); or a crowded last beat. On the first two songs they
+sat before section changes. It can't tell crash from ride well (one cymbal class). A
+guitar under 4 attacks a bar holds its chords (reverb, surf): no strum pattern is read. `strum_pattern.py` snaps the
 guitar's onsets to the 16ths of each bar and prints each section's pattern (`D`/`U` by
 the hand-motion convention, not measured) — on its first song it showed the verse push on
 4& the player described. Both keep every hit's real time and strength for the sketch.
@@ -316,6 +320,14 @@ songs is a small sample: it is weakest on rare qualities, and anything beyond 7t
 **The triad method is the independent cross-check** (bass-root constraint with slash
 relaxation, major bias **0**, flip count, per-cell margin). `--compare` lists cells where
 the two disagree on the root — check those by ear with the Trap 1 tests.
+
+**Read first, then check against a tab** (when `lyrics_from_page.py` found one):
+`tab_compare.py --tab analysis/tab_chords.json --chords analysis/chords_lv.json
+--sections analysis/sections.json --bass analysis/bass_per_cell.json` lists per section
+the chords only in the tab (never in the bass → a passing chord over a held bass, or
+wrong), only in ours (a tab simplification?), and the same root with the other third.
+A tab is a second opinion — often simplified or transposed — never the chart's source;
+name it and the agreement in the provenance, and its disagreements in the open questions.
 
 ## Phase 8 — Chart
 

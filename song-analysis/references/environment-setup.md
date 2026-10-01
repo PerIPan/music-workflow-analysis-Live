@@ -84,7 +84,7 @@ Notes:
   `tests/test_detect_meter.py`, `test_chord_proposal.py`, `test_mode_test.py`,
   `test_downbeat_check.py`, `test_stem_activity.py` and `test_performance.py`;
   `python3` runs `tests/test_foundation.py`, `test_align_lyrics.py`, `test_chart_html.py`,
-  `test_lyrics_tab.py` and `test_fetch_audio.py` (no yt-dlp or network needed); the Whisper venv runs
+  `test_lyrics_tab.py`, `test_chart_questions.py` and `test_fetch_audio.py` (no yt-dlp or network needed); the Whisper venv runs
   `tests/test_whisper_artefacts.py`; in `ableton-mcp/`,
   `python3 tests/test_push_notes.py`.
 

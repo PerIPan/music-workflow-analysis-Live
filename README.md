@@ -182,7 +182,7 @@ Run it yourself with `song-analysis/bench/run_bench.py` against your own verifie
 
 ## Tests
 
-Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 605 checks:
+Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 609 checks:
 
 ```bash
 <analysis-venv>/bin/python song-analysis/tests/test_detect_meter.py
@@ -195,6 +195,7 @@ python3 song-analysis/tests/test_foundation.py
 python3 song-analysis/tests/test_align_lyrics.py
 python3 song-analysis/tests/test_chart_html.py
 python3 song-analysis/tests/test_lyrics_tab.py
+python3 song-analysis/tests/test_chart_questions.py
 python3 song-analysis/tests/test_fetch_audio.py
 <whisper-venv>/bin/python song-analysis/tests/test_whisper_artefacts.py
 python3 ableton-mcp/tests/test_push_notes.py

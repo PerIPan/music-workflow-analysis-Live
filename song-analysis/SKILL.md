@@ -366,6 +366,16 @@ converts them. Read `references/chart-and-lyrics.md` first. Core invariants:
   arrangement/groove notes (entries, drops, turnarounds), and the open questions for the
   player (every call you made that the player hasn't confirmed).
 
+**Player check — ask, don't wait.** A "?" in a printed chart waits for someone to notice
+it; a player on their instrument answers in seconds. After rendering, run
+`python3 scripts/chart_questions.py gen_v1.py` (the open cells: chart chord, what
+lv-chordia, the triads and the bass heard, the parallel section's chord) and ask the
+player directly, up to four cells per round, the chart's chord first; ask the same way
+about `SUNG, NOT IN THE TEXT` words and any line Whisper misheard. Put each answer in the
+data file (a fix in `chords`, the cell in `verified`, a word in the lyrics), re-render, and
+say in `provenance` what the player checked. On Body Heat six cells took one round, and
+the chart printed with no "?".
+
 **What next (Live optional).** Only if the Live skills are installed and
 `mcp__ableton__health_check` answers, ask once: "The chart is done. Want a **sketch in
 Live** (the vocal on Live's grid, the chart's chords, the bass line and a drum part, the

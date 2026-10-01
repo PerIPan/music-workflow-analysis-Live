@@ -565,18 +565,26 @@ def main():
           "earlier stays; between two cells of one chord nothing moves",
           P == {(1, 1): "made a call", (1, 2): "to my", (2, 1): "other life",
                 (2, 2): "once", (3, 1): "more"}, P)
+    d = make_song([2, 2], 2.0, 4, ch, words=[("so", 3.2), ("I", 3.62), ("stepped", 3.88),
+                                             ("outside", 4.3)])
+    _, cells = build(dict(title="Push", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")],
+                          lyrics={(2, 2): ("so I stepped outside", "")}), d, "pickup.html")
+    P = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("a quick pickup into a pushed word stays: 'so I' | 'stepped outside'",
+          P == {(2, 2): "so I", (3, 1): "stepped outside"}, P)
     ch = {(b, c): ("N.C." if b == 4 else "Am") for b in range(1, 5) for c in (1, 2)}
     d = make_song([2, 2], 2.0, 4, ch)
     (d / "analysis" / "band_level.json").write_text(json.dumps(
-        {"grouping": [2, 2], "cells": [[1, 1, 1.0], [1, 2, 0.05], [2, 1, 0.9], [2, 2, 0.35],
+        {"grouping": [2, 2], "cells": [[1, 1, 1.0], [1, 2, 0.05], [2, 1, 0.9], [2, 2, 0.3],
                                        [3, 1, 1.1], [3, 2, 1.0], [4, 1, 0.0], [4, 2, 0.0]]}))
     doc, cells = build(dict(title="Stops", artist="Nobody", chords=ch,
                             sections=[("Verse", 1, 4, "verse", "")]), d, "stops.html")
     C = at(cells, 2)
-    check("a cell where the band drops under 0.3 of its median is greyed (a stop); 0.35 and "
-          "N.C. cells are not",
-          [k for k, v in C.items() if "stop" in v[0].split()] == [(1, 2)] and
-          "Grey chord" in doc, [k for k, v in C.items() if "stop" in v[0].split()])
+    check("a bar where the band drops under 0.15 of its median is greyed whole (a stop bar); "
+          "a quiet 0.3 and N.C. bars are not",
+          [k for k, v in C.items() if "stop" in v[0].split()] == [(1, 1), (1, 2)] and
+          "Grey chords" in doc, [k for k, v in C.items() if "stop" in v[0].split()])
     doc, _ = build(dict(title="Stops", artist="Nobody", chords=ch,
                         sections=[("Verse", 1, 4, "verse", "")]), make_song([2, 2], 2.0, 4, ch),
                    "nostops.html")

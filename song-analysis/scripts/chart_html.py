@@ -28,8 +28,8 @@ Usage (python3, standard library only):
 
 Reads <folder>/analysis/: foundation.json (downbeat_times, grouping, pulse_unit),
 chords_lv.json, chord_proposal.json, bass_per_cell.json; if present stem_activity.json
-(stem_activity.py; the song map's stem meters), band_level.json (a cell where the band
-drops under STOP of its median is a stop: its chord is greyed) and the Whisper words file
+(stem_activity.py; the song map's stem meters), band_level.json (a bar where a cell
+drops under STOP of the median is a stop bar: its chords are greyed) and the Whisper words file
 named by 'words'.
 
 SONG, the dict the data file defines. Cells are keyed (bar, cell): bars count from 1 on the
@@ -198,7 +198,7 @@ def mmss(t: float) -> str:
 
 
 ANTICIPATE = 0.75   # beats: a word this close before a chord change belongs to the new chord
-STOP = 0.3          # band_level.json: under this share of the median cell, the band stops
+STOP = 0.15         # band_level.json: under this share of the median cell, the band stops
 
 
 class Grid:
@@ -274,9 +274,11 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
     repeat once): it then counts as unheard, a beat per word. Words sung before the line's
     anchor cell are pulled into it (the chord the phrase resolves into), and nothing spills
     past the next line's anchor or out of the line's section. A word starting within a
-    dotted eighth (ANTICIPATE beats) of a chord change is sung into the new chord - the
-    push a player hears on the change, not the consonant Whisper times; between two cells
-    of one chord nothing moves. With no words, every line stays whole."""
+    dotted eighth (ANTICIPATE beats) of a chord change and held across it (the line's next
+    word comes after the change, or none does) is sung into the new chord - the push a
+    player hears, not the consonant Whisper times. A quick pickup into a word that is
+    itself pushed ("so I | stepped") stays; between two cells of one chord nothing moves.
+    With no words, every line stays whole."""
     entries = sorted(S.get('lyrics', {}).items())
     out, over = {}, {}
     stem = lambda w: norm(w)[:4]
@@ -339,10 +341,11 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
             else:                                # nothing heard: a beat per word
                 times[i] = t_a + beat * i
         last = key
-        for tok, t in zip(toks, times):
+        for i, (tok, t) in enumerate(zip(toks, times)):
             c, push = grid.at(t), grid.at(t + ANTICIPATE * beat)
-            if push != c and S['chords'].get(push) != S['chords'].get(c):
-                c = push                                 # pushed into the chord change
+            held = i + 1 == len(toks) or times[i + 1] >= grid.start(push) - 0.05 * beat
+            if push != c and S['chords'].get(push) != S['chords'].get(c) and held:
+                c = push                       # held across the change: on the new chord
             c = max(c, key)
             while c >= nxt:                              # never spill into the next line
                 c = grid.prev(c)
@@ -712,9 +715,10 @@ def render(S: dict, out: str | Path | None = None) -> Path:
     bass = {(c['bar'], c['cell']): c['pc_seconds'] for c in rd('bass_per_cell.json')['cells']}
     act = rd('stem_activity.json') if (a / 'stem_activity.json').exists() else {}
     bl = rd('band_level.json') if (a / 'band_level.json').exists() else {}
-    stops = frozenset((b, k) for b, k, v in bl.get('cells', []) if v < STOP
-                      and S['chords'].get((b, k)) not in (None, 'N.C.')
-                      and bl.get('grouping') in (None, grouping))
+    stop_bars = {b for b, k, v in bl.get('cells', []) if v < STOP
+                 and bl.get('grouping') in (None, grouping)}
+    stops = frozenset(k for k, ch in S['chords'].items()      # a bar with a stop: all of it
+                      if k[0] in stop_bars and ch != 'N.C.')
     stale = {s: len(v) for s, v in act.items() if len(v) != len(F['downbeat_times']) - 1}
     if stale:
         print(f'warning: stem_activity.json bars {stale} != {len(F["downbeat_times"]) - 1} '
@@ -781,8 +785,8 @@ def render(S: dict, out: str | Path | None = None) -> Path:
     if split:
         legend.append('Dashed underline = the chord changes inside this cell — listen for where.')
     if stops:
-        legend.append('<span style="color:#9a9a9a">Grey chord</span> = the band stops: no music '
-                      'under the voice (the chord is where the loop would be).')
+        legend.append('<span style="color:#9a9a9a">Grey chords</span> = the band stops in this '
+                      'bar (at most a hit or a ringing chord): the voice carries on alone.')
     items = ''.join(f'<li>{x}</li>\n' for x in legend)
     doc = f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

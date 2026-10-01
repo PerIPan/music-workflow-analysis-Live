@@ -91,11 +91,13 @@ across a chord change; between two cells of one chord words stay where sung. Fou
 4/4 loop where the player heard line endings on the next chord: words on beat 4.8 and
 4.4 ("…once more" belongs to the next bar's chord).
 
-**Stops.** Where the band drops out under the voice (a stop-time break), the chord stays
-in its cell but is greyed, so the band knows to stop rather than play the loop through.
-`stem_activity.py` measures it per cell (`band_level.json`, the stems without vocals vs
-their median cell); under 0.3 is a stop. On the first song the stops read 0.04–0.24, the
-quietest played cells 0.4.
+**Stops.** Where the band drops out under the voice (a stop-time break), the chords stay
+but the whole bar is greyed, so the band knows to stop rather than play the loop through
+(a player wanted the line's start greyed too: the band hits or rings on beat 1, then
+stops). `stem_activity.py` measures each cell as the median of 50 ms frames
+(`band_level.json`, the stems without vocals vs the median cell), so a hit or a ringing
+chord doesn't count as playing; under 0.15 is a stop. On the first song the stops read
+0.01–0.02, a quiet verse's played cells 0.3 and up (0.3 as the line caught one).
 
 Apply per line: identify the chord the line *resolves on* (usually a chord change near the
 phrase end) and anchor the line at that chord's cell; the renderer pulls earlier-sung

@@ -92,7 +92,7 @@ def main():
     r = subprocess.run([sys.executable, str(SCRIPT), str(st), "--foundation", str(d / "f4.json"),
                         "--out", str(d / "s4.json")], capture_output=True, text=True)
     bl = json.load(open(d / "band_level.json")) if (d / "band_level.json").exists() else {}
-    low = [(b, k) for b, k, v in bl.get("cells", []) if v < 0.3]
+    low = [(b, k) for b, k, v in bl.get("cells", []) if v < 0.15]
     check("band_level.json: the band per half-bar, vocals left out; the stop cell reads ~0",
           r.returncode == 0 and bl.get("grouping") == [2, 2] and len(bl["cells"]) == 16
           and low == [(6, 2)], (low, r.stdout + r.stderr))

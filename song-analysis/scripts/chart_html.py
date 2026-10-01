@@ -187,6 +187,13 @@ def label_em(name: str, bass: str | None) -> float:
     return math.ceil(w * 100) / 100
 
 
+def syllables(word: str) -> int:
+    """Vowel groups of a word, a silent final e dropped (fluorescent 3, the 1, life 1)."""
+    w = re.sub(r'[^a-zà-ÿα-ω]', '', word.lower())
+    n = len(re.findall(r'[aeiouyà-ÿάέήίόύώαεηιουω]+', w))
+    return max(1, n - (w.endswith('e') and not w.endswith(('le', 'ee')) and n > 1))
+
+
 def norm(w: str) -> str:
     """As align_lyrics.py: lowercase, no accents or punctuation, final sigma as sigma; ’ as '.
     '' for a token with no letters ('—', '♪')."""
@@ -199,6 +206,7 @@ def mmss(t: float) -> str:
     return f'{int(t // 60)}:{int(t % 60):02d}'
 
 
+SYLLABLE = 0.5     # beats added to the push per syllable past the second (fluorescent: 1.25)
 MISHEARD = 0.2     # letter similarity a misheard word needs to stand in for the line's word
 ANTICIPATE = 0.75   # beats: a word this close before a chord change belongs to the new chord
 STOP = 0.15         # band_level.json: under this share of the median cell, the band stops
@@ -378,7 +386,8 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
         low = max(floor, (first[key[0]], 1)) if sung_at else key
         last = low
         for i, (tok, t) in enumerate(zip(toks, times)):
-            c, push = grid.at(t), grid.at(t + ANTICIPATE * beat)
+            reach = ANTICIPATE + SYLLABLE * max(0, syllables(tok) - 2)   # a long word takes
+            c, push = grid.at(t), grid.at(t + reach * beat)        # longer to its stress
             held = i + 1 == len(toks) or times[i + 1] >= grid.start(push) - 0.05 * beat
             if push != c and held and i in m:  # heard words only: a guessed time can't push
                 c = push                       # held across the boundary: in the next cell

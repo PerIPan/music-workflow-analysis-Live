@@ -592,6 +592,15 @@ def main():
     check("a misheard line is placed by its stand-ins in order, onset letter first: "
           "'snow jesus baby' times 'slow jazz is playing'",
           M == {(2, 1): "slow", (2, 2): "jazz is", (3, 1): "playing"}, M)
+    d = make_song([2, 2], 2.0, 4, ch, words=[("lights", 2.2), ("are", 2.45), ("fluorescent", 3.4),
+                                             ("and", 4.4)])
+    _, cells = build(dict(title="Long", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")],
+                          lyrics={(2, 1): ("lights are fluorescent and", "")}), d, "long.html")
+    Lg = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("a long word reaches its stress later: 'fluorescent' 1.2 beats early still lands "
+          "on the next bar (half a beat more push per syllable past the second)",
+          Lg == {(2, 1): "lights are", (3, 1): "fluorescent and"}, Lg)
     check("placement 'sung' (default): opening words stay where sung, before the anchor; "
           "'anchor' pulls them in",
           P == {(2, 2): "and this", (3, 1): "double life", (3, 2): "tonight"} and

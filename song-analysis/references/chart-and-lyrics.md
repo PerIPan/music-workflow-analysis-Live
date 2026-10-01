@@ -78,7 +78,9 @@ on the next bar's Em. The anchor only orders the lines.
 next half-bar and held across it sits in the next cell.** Held = the line's next word
 starts after the boundary, or none follows. Whisper times a word's first consonant and
 singers push into the beat, so "…once more" on beat 4.4 is heard on the next bar's chord,
-and "night" on beat 2.35 on the second half. A quick pickup into a word that is itself
+and "night" on beat 2.35 on the second half. A long word reaches its stress later, so its window grows half a beat per
+syllable past the second ("fluorescent", started 1.2 beats early, is heard on the next
+bar; Whisper's shorter stand-in "flowing" hid its length). A quick pickup into a word that is itself
 pushed stays ("so I | stepped outside"); a guessed (unheard) word never pushes. Scored
 against the player's 15 corrections: 14/15 (the miss sits in a stop bar). Whisper mishears
 ("snow jesus baby" for "slow jazz is playing", "slipped" for "stepped"): words left

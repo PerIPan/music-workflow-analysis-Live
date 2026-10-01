@@ -30,6 +30,7 @@ the new ones stop.
   anywhere in a name ('Kit' finds the sample `FX Funkit.wav`, 'Piano' finds `Piano Bass`), so
   the build loads drums only as a Drum Rack (`.adg`), never a raw sample, bass only from
   Live's Bass folder and keys never from it, the exact name first. Hence full preset names.
+- Bass: **Synth Pick Bass** first in every preset (the user's pick), then the preset's own.
 - Drums: **Memphis Studio Kit** (a free Core Library add-on: Live → Packs) first for
   every acoustic-style preset; house and synth-pop try the 909 / 808 Core Kit before it.
 

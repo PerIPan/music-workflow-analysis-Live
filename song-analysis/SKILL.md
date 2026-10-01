@@ -416,7 +416,10 @@ declaring the chart done.
 ## Lessons learned
 
 1. Trust the user's ear over any analyzer. Ask them to count — a player's count settles
-   in seconds what a sweep can only rank.
+   in seconds what a sweep can only rank. When the player says "I think" or "not sure"
+   and the bass and both readers agree against it, show that evidence (the bass note, the
+   vocal stem's level per beat for a word's place) before changing the chart — a player
+   heard A on two bars whose bass plays C, then asked to check, and the C stood.
 2. Never hand an analyzer a candidate list it can't say "none of these" to — a constrained
    `beats_per_bar` and a key-gated major bias both produced confident wrong answers that
    survived every downstream check.

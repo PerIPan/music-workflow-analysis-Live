@@ -44,6 +44,7 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
 | 2 Stems | **demucs `htdemucs_ft -d mps`** | `stems/htdemucs_ft/<song>/` |
 | 3 Meter | **`scripts/detect_meter.py`** → **`scripts/foundation.py meter`** | `meter.json`, `foundation.json` (step 2) |
 | 4 Bass, tonic, mode | **`scripts/bass_notes.py`** (pyin) → **`scripts/mode_test.py`** | `bass.mid`, `bass_per_cell.json`, `mode.json` |
+| 4b Performance | **`scripts/drum_transcribe.py`** (ADTOF) + **`scripts/strum_pattern.py`** | `drum_hits.json`, `drums.mid`, `strum.json` |
 | 5 Lyrics | **`scripts/whisper_gated.py`** (gated by the vocal stem; stem and mix) | `lyrics.json`, `lyrics_mix.json` |
 | 6 Sections | **`scripts/align_lyrics.py`** (canonical lyrics ↔ word times) | `lyrics_aligned.json`, `sections.json` |
 | 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`** | `chords_lv.json`, `chord_proposal.json` |
@@ -118,8 +119,8 @@ drums/bass, or the guitar/piano parts too — e.g. for a Live sketch or remix):
 
 | Purpose / song | Run | Keep |
 |---|---|---|
-| chart, drums or bass only; no guitar/piano lead | `htdemucs_ft` (4 stems) | all four |
-| the song carries guitar or piano (or the user wants those parts) | `htdemucs_ft`, **then** `htdemucs_6s` | the four from `_ft` + only `guitar.wav` / `piano.wav` from `_6s` |
+| **default** (a full analysis, a Live sketch or remix) | `htdemucs_ft`, **then** `htdemucs_6s` | the four from `_ft` + only `guitar.wav` / `piano.wav` from `_6s` |
+| only a chart, the drums or the bass, and the user says so | `htdemucs_ft` (4 stems) | all four |
 
 The 4-stem `_ft` is the cleaner split (vocals, drums, bass): never replace it with the
 6-stem run, which bleeds keys into the bass. In `other.wav` the guitars, keys and pads are
@@ -225,6 +226,25 @@ for sharp keys — in F♯ minor a flat table writes the tonic `G♭m` and the d
 - **Bass enters late** in most songs: `bass_notes.py` prints `BASS ENTRY: bar N` when it
   finds one — re-run it with `--bass-entry-bar N` and pass the same to `chord_proposal.py`
   (earlier notes are stem bleed).
+
+## Phase 4b — Performance: the drummer's hits and the guitar's strumming
+
+```bash
+<adtof-venv>/bin/python scripts/drum_transcribe.py $ST/drums.wav \
+    --foundation analysis/foundation.json                 # → drum_hits.json, drums.mid
+<venv>/bin/python scripts/strum_pattern.py stems/htdemucs_6s/<song>/guitar.wav \
+    --foundation analysis/foundation.json [--sections analysis/sections.json] # → strum.json
+```
+
+A chart says which chord; a band (and a Live sketch) also needs **how** it's played.
+`drum_transcribe.py` labels every hit (ADTOF: kick, snare, hat, toms, cymbals; the stem
+is peak-normalised first) with a velocity from the stem, and lists the **fill bars** (a
+tom, or a crowded last beat) — on the first test song they sat on the bars before section
+changes. It can't tell crash from ride well (one cymbal class). `strum_pattern.py` snaps the
+guitar's onsets to the 16ths of each bar and prints each section's pattern (`D`/`U` by
+the hand-motion convention, not measured) — on its first song it showed the verse push on
+4& the player described. Both keep every hit's real time and strength for the sketch.
+Skip 4b when the purpose is only a chart.
 
 ## Phase 5 — Lyric timing (Whisper, gated by the vocal stem)
 

@@ -182,7 +182,7 @@ Run it yourself with `song-analysis/bench/run_bench.py` against your own verifie
 
 ## Tests
 
-Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 572 checks:
+Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 587 checks:
 
 ```bash
 <analysis-venv>/bin/python song-analysis/tests/test_detect_meter.py
@@ -190,6 +190,7 @@ Offline, on synthetic audio, a stand-in yt-dlp or a mock Live socket — 572 che
 <analysis-venv>/bin/python song-analysis/tests/test_mode_test.py
 <analysis-venv>/bin/python song-analysis/tests/test_downbeat_check.py
 <analysis-venv>/bin/python song-analysis/tests/test_stem_activity.py
+<analysis-venv>/bin/python song-analysis/tests/test_performance.py
 python3 song-analysis/tests/test_foundation.py
 python3 song-analysis/tests/test_align_lyrics.py
 python3 song-analysis/tests/test_chart_html.py

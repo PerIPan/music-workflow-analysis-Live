@@ -82,7 +82,7 @@ Notes:
   profiles are used.
 - Tests (offline, synthetic): in `song-analysis/`, `.venv-bp/bin/python` runs
   `tests/test_detect_meter.py`, `test_chord_proposal.py`, `test_mode_test.py`,
-  `test_downbeat_check.py` and `test_stem_activity.py`;
+  `test_downbeat_check.py`, `test_stem_activity.py` and `test_performance.py`;
   `python3` runs `tests/test_foundation.py`, `test_align_lyrics.py`, `test_chart_html.py`
   and `test_fetch_audio.py` (no yt-dlp or network needed); the Whisper venv runs
   `tests/test_whisper_artefacts.py`; in `ableton-mcp/`,

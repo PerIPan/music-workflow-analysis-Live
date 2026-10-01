@@ -10,8 +10,13 @@ Builds a Live Session from a song that `song-analysis` has finished:
   downbeat, so Live's bar N is the song's bar N. Live's tempo can then move freely.
 - **New parts** (drums, bass, keys) follow the chart's chord in every (bar, cell), in the
   song's own meter: 11/8 grouped 6+5 gets an 11/8 groove grouped 6+5.
-- **A sketch** is the same build with the preset `as-analysed`: the kept vocal, the
-  original mix muted for A/B, the chart's chords, the transcribed bass and a drum part.
+- **A sketch** plays what the band played (preset `as-analysed`): the kept vocal, the
+  original mix muted for A/B, the **drummer's transcribed hits** with their fills and
+  dynamics (`drum_hits.json`), the transcribed bass (half-quantized: the push stays), and
+  the chart's chords on the **guitar's own strums** (`strum.json`; a strum an 8th before a
+  change plays the new chord). Without those files (song-analysis Phase 4b) it falls back
+  to a generated drum part with fills at section ends and the chords on keys — robotic;
+  run Phase 4b first.
 
 > **Bars, never seconds.** Live beat of (bar, cell) = `(bar − 1 + P) × bar_beats + cell
 > offset`, with `bar_beats = beats_per_bar × 4 / pulse_unit` and P the pre-roll bars.
@@ -79,8 +84,10 @@ build refuses parts made for another plan.
   section), MIDI clips, then the stems (load, warp, markers, loop, section copies).
 - **Listen:** fire FULL; check bar 1, a mid-song chorus and the last chorus (drift shows
   late in the song), the chords against the chart, and the drum part with a drummer's eye.
-- **Sketch:** `remix_plan.py <song> --mode sketch`, then steps 3–5. Pick the drum template
-  from the chart's groove note (e.g. `--set drums.kick=four` for a kick on every beat).
+- **Sketch:** run song-analysis Phase 4b first (both stem splits, `drum_transcribe.py`,
+  `strum_pattern.py`), then `remix_plan.py <song> --mode sketch` and steps 3–5. Only
+  without a drum transcription: pick the drum template from the chart's groove note
+  (e.g. `--set drums.kick=four`).
 
 ## Hard rules
 

@@ -41,7 +41,9 @@ from chordsym import note_pc, parse  # noqa: E402
 PRESETS = ('house', 'synth-pop', 'lo-fi', 'garage-punk', 'as-analysed')
 STEMS = ('vocals', 'drums', 'bass', 'other', 'guitar', 'piano')
 SIX = ('guitar', 'piano')          # only from the extra htdemucs_6s run (song-analysis Phase 2)
-PART_OF_STEM = {'drums': 'drums', 'bass': 'bass', 'other': 'keys'}   # kept stem -> no new part
+PART_OF_STEM = {'drums': 'drums', 'bass': 'bass', 'other': 'keys',   # kept stem -> no new part
+                'guitar': 'guitar', 'piano': 'keys'}
+QUANT = 0.5                        # sketch: move transcribed bass halfway to the 16th grid
 TRACK_NAME = {'vocals': 'VOX', 'drums': 'DRUMS', 'bass': 'BASS', 'other': 'KEYS/GTR',
               'guitar': 'GTR', 'piano': 'PIANO', 'mix': 'MIX'}
 WARP_MODE = {'vocals': 'complex_pro', 'drums': 'beats', 'bass': 'complex_pro',
@@ -278,16 +280,36 @@ def build(a: argparse.Namespace) -> dict:
         k = min(max(bisect.bisect_right(db, t) - 1, 0), n - 1)
         return (k + P + (t - db[k]) / (db[k + 1] - db[k])) * bar_beats
 
-    bass_line = []
+    def tighten(b: float) -> float:
+        return round(b + QUANT * (round(b * 4) / 4 - b), 4)
+
+    # the sketch plays what the band played: transcribed bass (half-quantized: pyin onsets
+    # are ragged, the player's push is kept), the drummer's hits (drum_transcribe.py) and the
+    # guitar's strums (strum_pattern.py) at their own times and dynamics
+    bass_line, drum_line, strums = [], [], []
     bn = song / 'analysis' / 'bass_notes.json'
     if preset == 'as-analysed' and 'bass' in parts and bn.is_file():
         for x in json.loads(bn.read_text()).get('notes', []):
-            s0 = round(beat_of(float(x['start'])) * 4) / 4
-            s1 = round(beat_of(float(x['end'])) * 4) / 4
+            s0 = tighten(beat_of(float(x['start'])))
+            s1 = tighten(beat_of(float(x['end'])))
             if 0 <= s0 < total_beats:
                 bass_line.append(dict(pitch=int(x['pitch']), start_time=s0,
                                       duration=max(min(s1, total_beats) - s0, 0.25),
                                       velocity=int(x.get('velocity', 90))))
+    dh = song / 'analysis' / 'drum_hits.json'
+    if preset == 'as-analysed' and 'drums' in parts and dh.is_file():
+        for h in json.loads(dh.read_text()).get('hits', []):
+            b = round(beat_of(float(h['t'])), 4)
+            if 0 <= b < total_beats:
+                drum_line.append(dict(pitch=int(h['pitch']), start_time=b, duration=0.1,
+                                      velocity=int(h['velocity'])))
+    sp = song / 'analysis' / 'strum.json'
+    if preset == 'as-analysed' and 'guitar' not in keep and sp.is_file():
+        strums = [[round(beat_of(float(x)), 4), float(s)]
+                  for x, s in json.loads(sp.read_text()).get('onsets', [])
+                  if 0 <= beat_of(float(x)) < total_beats]
+    if strums:                     # the chords go on the guitar's strums, not block keys
+        parts = [p for p in parts if p != 'keys'] + ['guitar']
 
     num, den = bpb, unit
     title = S['title']
@@ -305,7 +327,7 @@ def build(a: argparse.Namespace) -> dict:
                    outlier_bars=sorted(outliers)),
         warp=dict(markers=marks, note='[seconds in the stem file, Live beat]; one per downbeat'),
         stems=stems, parts=parts, sections=secs, chords=chords, bass_hints=hints,
-        energy=energy, bass_line=bass_line)
+        energy=energy, bass_line=bass_line, drum_line=drum_line, strums=strums)
 
 
 def summary(p: dict) -> str:

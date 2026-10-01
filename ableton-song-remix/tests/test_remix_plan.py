@@ -99,9 +99,28 @@ def main():
     check('sketch: preset as-analysed, mix muted',
           r.returncode == 0 and p['preset'] == 'as-analysed' and mix and mix[0]['mute'], r.stderr)
     bl = p['bass_line'] if p else []
-    check('sketch: transcribed bass in beats, on 16ths, after the pre-roll',
-          len(bl) == 16 and all(n['start_time'] * 4 == int(n['start_time'] * 4) for n in bl)
-          and bl[0]['start_time'] == 4.0, bl[:2])
+    off = [n['start_time'] - round(n['start_time'] * 4) / 4 for n in bl]
+    check('sketch: transcribed bass in beats after the pre-roll, half-way to the 16ths '
+          '(0.02 beat late -> 0.01)',
+          len(bl) == 16 and all(0.005 < x < 0.015 for x in off)
+          and abs(bl[0]['start_time'] - 4.01) < 0.002, bl[:2])
+    check('sketch without drum_hits.json / strum.json: generated drums, keys, no guitar',
+          p['drum_line'] == [] and p['strums'] == [] and 'keys' in p['parts'])
+    F = json.loads((s / 'analysis' / 'foundation.json').read_text())
+    d3 = F['downbeat_times'][2]
+    (s / 'analysis' / 'drum_hits.json').write_text(json.dumps({'hits': [
+        {'t': d3, 'pitch': 36, 'velocity': 110}, {'t': d3 + 0.3, 'pitch': 45, 'velocity': 64}]}))
+    (s / 'analysis' / 'strum.json').write_text(json.dumps({'onsets': [[d3, 0.9], [d3 + 0.13, 0.4]]}))
+    r, p = plan(s, '--mode', 'sketch', '--force')
+    dl = p['drum_line'] if p else []
+    check("sketch: the drummer's hits in Live beats (bar 3 = beat 12 after the pre-roll), "
+          'velocity and tom kept',
+          r.returncode == 0 and [(n['pitch'], n['start_time'], n['velocity']) for n in dl][:1] ==
+          [(36, 12.0, 110)] and dl[1]['pitch'] == 45 and 12.0 < dl[1]['start_time'] < 13.0,
+          (dl, r.stdout + r.stderr))
+    check('sketch with strums: a guitar part replaces the block keys',
+          p and p['parts'] == ['drums', 'bass', 'guitar'] and p['strums'][0] == [12.0, 0.9],
+          p and (p['parts'], p['strums'][:2]))
 
     # 11/8 as 6+5, eighth pulse
     s = make_song(TMP / 'c', grouping=(6, 5), pulse_unit=8, bar_s=4.18, nbars=8, db0=0.0,

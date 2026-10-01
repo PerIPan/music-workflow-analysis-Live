@@ -14,11 +14,11 @@ the new ones stop.
 
 | Preset | Drums (tier 1 → 3) | Bass | Keys | Swing / humanize |
 |---|---|---|---|---|
-| `house` | four-on-the-floor kick, open hat on the offbeats; + clap backbeat and quiet closed 16ths | root hold → offbeat 8ths | pad → offbeat stabs | 0.54 / 2 ms |
-| `synth-pop` | backbeat kick, 8th hats; + snare; 16th hats at tier 3 | root hold → 8ths → octave 8ths | pad → 8th arpeggio | 0.50 / 3 ms |
-| `lo-fi` | kick on 1, half-time snare; backbeat, 8th hats, ghost snares at tier 3 | root hold → long root + approach note | rootless pad → comping | 0.58 / 12 ms |
+| `house` | four-on-the-floor kick, open hat on the offbeats; + clap backbeat and quiet closed 16ths; fills at section ends | root hold → offbeat 8ths | pad → offbeat stabs | 0.54 / 2 ms |
+| `synth-pop` | backbeat kick, 8th hats; + snare; 16th hats at tier 3; fills at section ends | root hold → 8ths → octave 8ths | pad → 8th arpeggio | 0.50 / 3 ms |
+| `lo-fi` | kick on 1, half-time snare; backbeat, 8th hats, ghost snares at tier 3; fills at section ends | root hold → long root + approach note | rootless pad → comping | 0.58 / 12 ms |
 | `garage-punk` | backbeat, 8th hats → ride; fills every 8 bars | root hold → 8ths | power chords, one per cell | 0.50 / 6 ms |
-| `as-analysed` (sketch) | bar-start kick → backbeat + 8th hats | the transcribed line (`bass_notes.json`) | the chart's chord once per cell | straight, none |
+| `as-analysed` (sketch) | the drummer's hits (`drum_hits.json`); else bar-start kick → backbeat + 8th hats, fills at section ends | the transcribed line (`bass_notes.json`), half-quantized | on the guitar's strums (`strum.json`, push into changes); else the chart's chord once per cell on keys | as played; generated parts 6 ms |
 
 - Crashes (with a kick) land on section starts at tier ≥ 2 and after every fill; the crash
   replaces the hat at that onset.

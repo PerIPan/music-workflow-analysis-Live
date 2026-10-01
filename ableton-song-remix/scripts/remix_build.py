@@ -112,7 +112,8 @@ MASTER_BUS = 'MASTER_BUS'
 MASTER_CHAIN = ('EQ Eight', 'Glue Compressor', 'Limiter')     # in signal order
 TRACK_FX = {'vocals': ('EQ Eight', 'Compressor'), 'bass': ('EQ Eight', 'Compressor'),
             'drums': ('Drum Buss', 'EQ Eight'), 'keys': ('EQ Eight', 'Compressor'),
-            'other': ('EQ Eight', 'Compressor')}               # per role; 'mix' (A/B) stays clean
+            'other': ('EQ Eight', 'Compressor'), 'guitar': ('EQ Eight', 'Compressor')}
+                                                           # per role; 'mix' (A/B) stays clean
 
 class Sim:
     """Replies for --dry-run: an empty Set with 8 unnamed scenes; no socket is opened."""

@@ -25,7 +25,7 @@ bars), crash (0/1), ghosts (0/1), kick_run. A drums/bass/keys key applies to eve
 """
 from __future__ import annotations
 
-import argparse, copy, hashlib, json, math, random, sys
+import argparse, bisect, copy, hashlib, json, math, random, sys
 from pathlib import Path
 
 KICK, SNARE, CLAP, CH, OH, CRASH, RIDE = 36, 38, 39, 42, 46, 49, 51
@@ -38,7 +38,7 @@ TOMS = {41, 43, 45, 47, 48, 50}
 
 PRESETS = {
     'house': dict(
-        swing=0.54, humanize_ms=2, fills=0, crash=1, ghosts=0, kick_run=2,
+        swing=0.54, humanize_ms=2, fills=-1, crash=1, ghosts=0, kick_run=2,
         drums={1: dict(kick='four', snare='none', hats='offbeat'),
                2: dict(kick='four', snare='clap', hats='offbeat+16'),
                3: dict(kick='four', snare='clap', hats='offbeat+16')},
@@ -46,7 +46,8 @@ PRESETS = {
         keys={1: 'pad', 2: 'stab_off', 3: 'stab_off'}, voicing='close',
         search=dict(drums=['909 Core Kit', 'Memphis Studio Kit', 'Kit'],
                     bass=['Synth Pick Bass', 'Hip-Hop Sub Bass', 'Sub Bass', 'Bass'],
-                    keys=['House Stab', 'Chord Key Stabs', 'Grand Piano', 'Piano'])),
+                    keys=['House Stab', 'Chord Key Stabs', 'Grand Piano', 'Piano'],
+                    guitar=['Steel Basic Guitar', 'Steel Picked Guitar', 'Guitar'])),
     'synth-pop': dict(
         swing=0.5, humanize_ms=3, fills=-1, crash=1, ghosts=0, kick_run=2,
         drums={1: dict(kick='backbeat', snare='none', hats='8'),
@@ -56,16 +57,18 @@ PRESETS = {
         keys={1: 'pad', 2: 'pad', 3: 'arp8'}, voicing='close',
         search=dict(drums=['808 Core Kit', 'Memphis Studio Kit', 'Kit'],
                     bass=['Synth Pick Bass', 'Sub Species Synth Bass', 'Synth Bass', 'Bass'],
-                    keys=['Pad', 'Synth', 'Piano'])),
+                    keys=['Pad', 'Synth', 'Piano'],
+                    guitar=['Steel Basic Guitar', 'Steel Picked Guitar', 'Guitar'])),
     'lo-fi': dict(
-        swing=0.58, humanize_ms=12, fills=0, crash=0, ghosts=1, kick_run=2,
+        swing=0.58, humanize_ms=12, fills=-1, crash=0, ghosts=1, kick_run=2,
         drums={1: dict(kick='sparse', snare='half', hats='8'),
                2: dict(kick='backbeat', snare='backbeat', hats='8'),
                3: dict(kick='backbeat', snare='backbeat', hats='8')},
         bass={1: 'root_hold', 2: 'lofi', 3: 'lofi'},
         keys={1: 'pad', 2: 'comp', 3: 'comp'}, voicing='rootless',
         search=dict(drums=['Memphis Studio Kit', 'Kit'], bass=['Synth Pick Bass', 'Electric Bass Soft', 'Bass'],
-                    keys=['E-Piano Basic', 'Electric Piano', 'Piano'])),
+                    keys=['E-Piano Basic', 'Electric Piano', 'Piano'],
+                    guitar=['Steel Basic Guitar', 'Steel Picked Guitar', 'Guitar'])),
     'garage-punk': dict(
         swing=0.5, humanize_ms=6, fills=8, crash=1, ghosts=0, kick_run=3,
         drums={1: dict(kick='backbeat', snare='backbeat', hats='8'),
@@ -74,16 +77,18 @@ PRESETS = {
         bass={1: 'root_hold', 2: 'drive8', 3: 'drive8'},
         keys={1: 'block', 2: 'block', 3: 'block'}, voicing='power',
         search=dict(drums=['Memphis Studio Kit', 'Kit'], bass=['Synth Pick Bass', 'Electric Bass Raw', 'Bass'],
-                    keys=['Clean Basic Guitar', 'Guitar', 'Organ'])),
+                    keys=['Clean Basic Guitar', 'Guitar', 'Organ'],
+                    guitar=['Steel Basic Guitar', 'Steel Picked Guitar', 'Guitar'])),
     'as-analysed': dict(
-        swing=0.5, humanize_ms=0, fills=0, crash=0, ghosts=0, kick_run=2,
+        swing=0.5, humanize_ms=6, fills=-1, crash=0, ghosts=0, kick_run=2,
         drums={1: dict(kick='sparse', snare='none', hats='tactus'),
                2: dict(kick='backbeat', snare='backbeat', hats='8'),
                3: dict(kick='backbeat', snare='backbeat', hats='8')},
         bass={1: 'as-analysed', 2: 'as-analysed', 3: 'as-analysed'},
         keys={1: 'block', 2: 'block', 3: 'block'}, voicing='close',
         search=dict(drums=['Memphis Studio Kit', 'Kit'], bass=['Synth Pick Bass', 'Electric Bass', 'Bass'],
-                    keys=['Grand Piano', 'Ac Piano Upright', 'Piano'])),
+                    keys=['Grand Piano', 'Ac Piano Upright', 'Piano'],
+                    guitar=['Steel Basic Guitar', 'Steel Picked Guitar', 'Guitar'])),
 }
 OPTIONS = {'drums.kick': ('four', 'backbeat', 'sparse'),
            'drums.snare': ('backbeat', 'clap', 'half', 'none'),
@@ -444,6 +449,52 @@ def keys(plan: dict, pre: dict) -> list[dict]:
     return out
 
 
+def guitar_shape(chord: dict) -> list[int]:
+    """An open-position-like strum voicing: the chord's bass in E2-D#3, then chord tones
+    stacked at least a minor third apart up to E5 - six strings at most."""
+    pcs = {(chord['root'] + x) % 12 for x in chord['intervals']}
+    low = next(m for m in range(40, 52) if m % 12 == (chord.get('bass') if chord.get('bass')
+                                                       is not None else chord['root']))
+    v = [low]
+    while len(v) < 6:
+        m = next((m for m in range(v[-1] + 3, 77) if m % 12 in pcs), None)
+        if m is None:
+            break
+        v.append(m)
+    return v
+
+
+def guitar(plan: dict) -> list[dict]:
+    """The chart's chords on the guitar's own strums (plan['strums']: Live beat, strength
+    from strum_pattern.py). A strum within an 8th before a chord change already plays the
+    new chord - the push (e.g. a change on 4&). Down strokes on the 8ths, low to high, all
+    strings; up strokes on the 16ths between, high to low, the top four, softer; strings
+    ~9 ms apart; each strum rings until the next."""
+    chords = sorted((c for c in plan['chords']), key=lambda c: c['start_beat'])
+    starts = [c['start_beat'] for c in chords]
+    T = plan['tempo']['live']
+    spread = 0.009 * T / 60
+    strums = sorted(plan.get('strums', []))
+    out = []
+    for i, (b, s) in enumerate(strums):
+        k = bisect.bisect_right(starts, b + EPS) - 1
+        if k + 1 < len(chords) and starts[k + 1] - b <= 0.5 + EPS:
+            k += 1                                   # the push: early into the next chord
+        if k < 0 or chords[k]['root'] is None:
+            continue
+        shape = guitar_shape(chords[k])
+        down = round(b * 4) % 2 == 0
+        strings = shape if down else shape[::-1][:4]
+        nxt = strums[i + 1][0] if i + 1 < len(strums) else plan['grid']['total_beats']
+        vel = int(min(120, max(30, (45 + 75 * s) * (1 if down else 0.85))))
+        for j, m in enumerate(strings):
+            st = round(b + j * spread, 4)
+            dur = round(min(max(nxt - st - 0.02, 0.05), 4.0), 4)
+            if st + dur <= plan['grid']['total_beats']:
+                out.append(note(m, st, dur, vel - 2 * j))
+    return out
+
+
 # ---------------------------------------------------------------- feel
 
 def swing_humanize(notes: list[dict], plan: dict, amount: float, ms: float, seed: int,
@@ -533,7 +584,12 @@ def make_parts(plan: dict, preset: str | None = None, sets: list[str] = (),
     g, T = plan['grid'], plan['tempo']['live']
     parts, report = {}, {'preset': name, 'seed': seed, 'sets': list(sets)}
     downbeats = {round(s['start_beat'], 4) for s in plan['sections']}
-    if 'drums' in plan['parts']:
+    if 'drums' in plan['parts'] and plan.get('drum_line') and name == 'as-analysed':
+        d = [note(n['pitch'], n['start_time'], n['duration'], n['velocity'])
+             for n in plan['drum_line']]             # the drummer's own hits and fills
+        parts['drums'] = d
+        report['drums'] = 'transcribed (drum_transcribe.py)'
+    elif 'drums' in plan['parts']:
         d = drums(plan, pre)
         bad = validate_drums(d, T, g['bar_beats'], g['preroll_bars'], pre['kick_run'])
         if bad:
@@ -550,6 +606,8 @@ def make_parts(plan: dict, preset: str | None = None, sets: list[str] = (),
     if 'keys' in plan['parts']:
         parts['keys'] = swing_humanize(keys(plan, pre), plan, pre['swing'],
                                        pre['humanize_ms'], seed + 2, downbeats)
+    if 'guitar' in plan['parts']:
+        parts['guitar'] = guitar(plan)
     end = g['total_beats']
     for p, ns in parts.items():
         over = [n for n in ns if n['start_time'] + n['duration'] > end + 1e-6]
@@ -558,7 +616,7 @@ def make_parts(plan: dict, preset: str | None = None, sets: list[str] = (),
     report['sections'] = [
         dict(name=s['name'], bars=f"{s['first_bar']}-{s['last_bar']}",
              tiers={p: max(plan['energy'][p][s['first_bar'] - 1:s['last_bar']])
-                    for p in parts},
+                    for p in parts if p in plan['energy']},
              notes={p: sum(s['start_beat'] <= n['start_time'] < s['end_beat'] for n in ns)
                     for p, ns in parts.items()})
         for s in plan['sections']]
@@ -590,7 +648,7 @@ def main() -> None:
     print(f"{'section':<16} {'bars':<9} " + ' '.join(f'{p:<12}' for p in res['parts']))
     for s in res['report']['sections']:
         print(f"{s['name'][:15]:<16} {s['bars']:<9} " +
-              ' '.join(f"t{s['tiers'][p]} {s['notes'][p]:>5} n  " for p in res['parts']))
+              ' '.join(f"t{s['tiers'].get(p, '-')} {s['notes'][p]:>5} n  " for p in res['parts']))
     shown = set()
     for b in res['report'].get('grid_bars', []):
         txt = grid_print(straight, plan, b)

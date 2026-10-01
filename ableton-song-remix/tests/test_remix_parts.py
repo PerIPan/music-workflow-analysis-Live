@@ -208,6 +208,30 @@ def main():
         check('--set refuses an unknown option', False)
     except ValueError:
         check('--set refuses an unknown option', True)
+
+    # sketch guitar: the chart's chords on the measured strums, the push into a change
+    from remix_parts import guitar, guitar_shape
+    C = dict(start_beat=0.0, beats=2.0, root=0, intervals=[0, 4, 7], bass=0)
+    G = dict(start_beat=2.0, beats=2.0, root=7, intervals=[0, 4, 7], bass=7)
+    gp = dict(chords=[C, G], strums=[[0.0, 0.9], [1.0, 0.8], [1.5, 0.9], [1.75, 0.5]],
+              tempo=dict(live=120.0), grid=dict(total_beats=4.0))
+    gn = guitar(gp)
+    at = lambda b: sorted((n for n in gn if b - 1e-6 <= n['start_time'] < b + 0.12),
+                          key=lambda n: n['start_time'])
+    check('guitar shape: bass in E2-D#3, chord tones only, up to six strings',
+          guitar_shape(C)[0] == 48 and len(guitar_shape(C)) <= 6 and
+          all(m % 12 in (0, 4, 7) for m in guitar_shape(C)) and max(guitar_shape(G)) <= 76)
+    check('a strum on beat 2 plays the chord sounding there (C)',
+          at(1.0)[0]['pitch'] % 12 == 0 and len(at(1.0)) == len(guitar_shape(C)))
+    check('the push: a strum an 8th before the change already plays the next chord (G)',
+          at(1.5)[0]['pitch'] == guitar_shape(G)[0])
+    up = at(1.75)
+    check('a 16th off the 8ths is an up stroke: top four strings, high to low, softer',
+          len(up) == 4 and up[0]['pitch'] > up[-1]['pitch'] and
+          up[0]['velocity'] < at(1.5)[0]['velocity'], [(n['pitch'], n['velocity']) for n in up])
+    check('strings spread ~9 ms, each strum rings until the next',
+          abs((at(0.0)[1]['start_time'] - at(0.0)[0]['start_time']) - 0.018) < 1e-3 and
+          at(0.0)[0]['start_time'] + at(0.0)[0]['duration'] <= 1.0)
     sys.exit(1 if fails else 0)
 
 

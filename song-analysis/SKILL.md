@@ -331,6 +331,11 @@ wrong), only in ours (a tab simplification?), and the same root with the other t
 A tab is a second opinion — often simplified or transposed — never the chart's source;
 name it and the agreement in the provenance, and its disagreements in the open questions.
 
+**Where the bass drops out, agreement proves little.** In a breakdown both readers hear
+only the upper voices, and chords sharing them pass for each other: both said Am where the
+player heard G (a chorus-2 turnaround, bass out) — the parallel chorus-1 bar, with bass,
+read G. In bass-less cells, chart what the parallel section plays and list it for the ear.
+
 ## Phase 8 — Chart
 
 ```bash

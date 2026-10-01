@@ -78,6 +78,19 @@ Chart:   [A♭]                              |[E♭]    "Pickup words here, / an
                                             ^ phrase anchored at the E♭ change
 ```
 
+**Inside a line, the same holds word by word: a word sung within an eighth before a chord
+change belongs to the new chord.** Singers push into the change, and Whisper times the
+word's first consonant, so a word that "starts on the E minor" for the player sits a 16th
+early on the clock. The renderer moves it (`ANTICIPATE`, half a beat). Found on a 4/4 loop
+where every line's last words ("…other life", "…other room") start on beat 4.8 and the
+player hears them on the next chord.
+
+**Stops.** Where the band drops out under the voice (a stop-time break), the chord stays
+in its cell but is greyed, so the band knows to stop rather than play the loop through.
+`stem_activity.py` measures it per cell (`band_level.json`, the stems without vocals vs
+their median cell); under 0.3 is a stop. On the first song the stops read 0.04–0.24, the
+quietest played cells 0.4.
+
 Apply per line: identify the chord the line *resolves on* (usually a chord change near the
 phrase end) and anchor the line at that chord's cell; the renderer pulls earlier-sung
 words into it.

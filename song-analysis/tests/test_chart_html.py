@@ -342,7 +342,7 @@ def main():
           P)
     _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
                   {(2, 1): ("paper boats — ohhh", ""), (3, 1): ("harbour", "")},
-                  [("paper", 2.1), ("boats", 2.4), ("ohhh", 2.8), ("♪", 3.6), ("harbour", 4.1)],
+                  [("paper", 2.1), ("boats", 2.4), ("ohhh", 2.7), ("♪", 3.6), ("harbour", 4.1)],
                   "punct.html")
     check("a '♪' token or a dash is no word", P == {(2, 1): "paper boats — ohhh",
                                                   (3, 1): "harbour"}, P)
@@ -380,7 +380,7 @@ def main():
 
     # ------------------------------------------------------------ 11/8 as 6+5
     ch = {(b, c): "Am" for b in range(1, 6) for c in (1, 2)}
-    d = make_song([6, 5], 2.2, 5, ch, words=[("Cold", 0.1), ("winds", 1.15), ("carry", 1.3),
+    d = make_song([6, 5], 2.2, 5, ch, words=[("Cold", 0.1), ("winds", 1.0), ("carry", 1.3),
                                              ("one", 4.5)], pulse_unit=8)
     S = dict(title="Odd", artist="Nobody", words="words.json", chords=ch,
              sections=[("Verse", 1, 5, "verse", "")],
@@ -551,6 +551,31 @@ def main():
     r = run(str(d / "gen_v1.py"))
     check("CLI: a malformed analysis file: exit 1, no traceback", r.returncode == 1
           and "chart_html: KeyError" in r.stderr and "Traceback" not in r.stderr, r.stderr)
+    # ---------------------------------------------------- the push and the band's stops
+    _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
+                  {(1, 1): ("made a call to my other life", "")},
+                  [("made", 0.1), ("a", 0.4), ("call", 0.6), ("to", 1.2), ("my", 1.5),
+                   ("other", 1.9), ("life", 2.3)], "push.html")
+    check("a word sung just before the change (within an eighth) lands on the next chord; "
+          "one an eighth and more before stays",
+          P == {(1, 1): "made a call", (1, 2): "to my", (2, 1): "other life"}, P)
+    ch = {(b, c): ("N.C." if b == 4 else "Am") for b in range(1, 5) for c in (1, 2)}
+    d = make_song([2, 2], 2.0, 4, ch)
+    (d / "analysis" / "band_level.json").write_text(json.dumps(
+        {"grouping": [2, 2], "cells": [[1, 1, 1.0], [1, 2, 0.05], [2, 1, 0.9], [2, 2, 0.35],
+                                       [3, 1, 1.1], [3, 2, 1.0], [4, 1, 0.0], [4, 2, 0.0]]}))
+    doc, cells = build(dict(title="Stops", artist="Nobody", chords=ch,
+                            sections=[("Verse", 1, 4, "verse", "")]), d, "stops.html")
+    C = at(cells, 2)
+    check("a cell where the band drops under 0.3 of its median is greyed (a stop); 0.35 and "
+          "N.C. cells are not",
+          [k for k, v in C.items() if "stop" in v[0].split()] == [(1, 2)] and
+          "Grey chord" in doc, [k for k, v in C.items() if "stop" in v[0].split()])
+    doc, _ = build(dict(title="Stops", artist="Nobody", chords=ch,
+                        sections=[("Verse", 1, 4, "verse", "")]), make_song([2, 2], 2.0, 4, ch),
+                   "nostops.html")
+    check("no band_level.json: no stops, no legend line", "Grey chord" not in doc and
+          'class="half stop' not in doc)
     sys.exit(1 if fails else 0)
 
 

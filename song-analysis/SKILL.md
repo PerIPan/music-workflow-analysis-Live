@@ -50,7 +50,7 @@ commentary (Phase 8). The JSON artifacts are working files, not the answer.
 | 5 Lyrics | **`scripts/whisper_gated.py`** (gated by the vocal stem; stem and mix) | `lyrics.json`, `lyrics_mix.json` |
 | 6 Sections | **`scripts/align_lyrics.py`** (canonical lyrics ↔ word times) | `lyrics_aligned.json`, `sections.json` |
 | 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`**, then **`scripts/tab_compare.py`** | `chords_lv.json`, `chord_proposal.json` |
-| 8 Chart | **`scripts/stem_activity.py`** → **`scripts/chart_html.py`** (per-song data file) | `stem_activity.json`, self-contained **HTML** chart |
+| 8 Chart | **`scripts/stem_activity.py`** → **`scripts/chart_html.py`** (per-song data file) | `stem_activity.json`, `band_level.json`, self-contained **HTML** chart |
 
 `<venv>` = the analysis venv; Whisper, lv-chordia and yt-dlp have their own
 (`references/environment-setup.md`). Below, `ST=stems/htdemucs_ft/<song>`. After any
@@ -333,7 +333,8 @@ name it and the agreement in the provenance, and its disagreements in the open q
 
 ```bash
 <venv>/bin/python scripts/stem_activity.py $ST --foundation analysis/foundation.json \
-    --out analysis/stem_activity.json            # per-bar stem levels for the song map
+    --out analysis/stem_activity.json            # per-bar stem levels for the song map,
+                                                 # + band_level.json: the band's stops
 python3 scripts/chart_html.py gen_v1.py          # in the song folder; --out to write elsewhere
 ```
 

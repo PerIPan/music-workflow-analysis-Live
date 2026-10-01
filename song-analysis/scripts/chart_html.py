@@ -28,7 +28,9 @@ Usage (python3, standard library only):
 
 Reads <folder>/analysis/: foundation.json (downbeat_times, grouping, pulse_unit),
 chords_lv.json, chord_proposal.json, bass_per_cell.json; if present stem_activity.json
-(stem_activity.py; the song map's stem meters) and the Whisper words file named by 'words'.
+(stem_activity.py; the song map's stem meters), band_level.json (a cell where the band
+drops under STOP of its median is a stop: its chord is greyed) and the Whisper words file
+named by 'words'.
 
 SONG, the dict the data file defines. Cells are keyed (bar, cell): bars count from 1 on the
 audio's bar grid, cells from 1, one per group of the grouping (4/4 as [2, 2]: beats 1-2 and
@@ -195,6 +197,10 @@ def mmss(t: float) -> str:
     return f'{int(t // 60)}:{int(t % 60):02d}'
 
 
+ANTICIPATE = 0.5    # beats: a word this close before the next cell belongs to its chord
+STOP = 0.3          # band_level.json: under this share of the median cell, the band stops
+
+
 class Grid:
     """Bar and cell times: cells cut at cumulative group fractions of each bar, the same
     cells as bass_notes.py, lv_chords.py and chord_proposal.py."""
@@ -267,8 +273,10 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
     sung line needs when they start nearer that line's anchor than its own (Whisper heard a
     repeat once): it then counts as unheard, a beat per word. Words sung before the line's
     anchor cell are pulled into it (the chord the phrase resolves into), and nothing spills
-    past the next line's anchor or out of the line's section. With no words, every line
-    stays whole."""
+    past the next line's anchor or out of the line's section. A word starting within an
+    eighth (ANTICIPATE beats) of the next cell is sung into that cell's chord - the push
+    a player hears on the change, not the consonant Whisper times. With no words, every
+    line stays whole."""
     entries = sorted(S.get('lyrics', {}).items())
     out, over = {}, {}
     stem = lambda w: norm(w)[:4]
@@ -332,7 +340,7 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
                 times[i] = t_a + beat * i
         last = key
         for tok, t in zip(toks, times):
-            c = max(grid.at(t), key)
+            c = max(grid.at(t + ANTICIPATE * beat), key)   # a push lands on the next chord
             while c >= nxt:                              # never spill into the next line
                 c = grid.prev(c)
             c = max(c, last)                             # words stay in sung order
@@ -344,7 +352,7 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
 # ------------------------------------------------------------------ html
 
 def cell_html(S: dict, key: tuple, bar_end: bool, flagged: set, split: set, lyr: dict,
-              over: dict) -> str:
+              over: dict, stops: frozenset = frozenset()) -> str:
     ch = S['chords'].get(key, '')
     if ch == 'N.C.':
         chord = '<div class="chord rest">N.C.</div>'
@@ -366,20 +374,20 @@ def cell_html(S: dict, key: tuple, bar_end: bool, flagged: set, split: set, lyr:
     elif okind:                                         # the next section's pickup
         ly += f'<span class="pickup {esc(okind.split()[-1])}">{esc(otext)}</span>'
     cls = ['half', 'bar-end' if bar_end else '', 'q' if key in flagged else '',
-           'split' if key in split else '']
+           'split' if key in split else '', 'stop' if key in stops else '']
     return (f'<div class="{" ".join(c for c in cls if c)}">{chord}'
             f'<div class="{lcls}">{ly}</div></div>')
 
 
 def rows_html(S: dict, n: int, per_row: int, flagged: set, split: set, lyr: dict,
-              over: dict) -> str:
+              over: dict, stops: frozenset = frozenset()) -> str:
     out = []
     for name, b0, b1, kind, note, *_ in S['sections']:
         bars = list(range(b0, b1 + 1))
         for r, chunk in enumerate(bars[i:i + per_row] for i in range(0, len(bars), per_row)):
             start = r == 0
             cols = f'cols-{n * len(chunk)}' if len(chunk) < per_row else ''
-            cells = ''.join(cell_html(S, (b, c), c == n, flagged, split, lyr, over)
+            cells = ''.join(cell_html(S, (b, c), c == n, flagged, split, lyr, over, stops)
                             for b in chunk for c in range(1, n + 1))
             rng = f'bar {chunk[0]}' if len(chunk) == 1 else f'bars {chunk[0]}–{chunk[-1]}'
             head = (f'<span class="row-name">{esc(name)}</span><span class="row-meta">{rng}</span>'
@@ -487,6 +495,7 @@ h1{font-size:1.15em;margin:0 0 .05em;font-weight:600}
 .chord{font-size:1.85em;font-weight:700;color:#1a1a1a;font-family:Georgia,Gelasio,"Liberation Serif",Tinos,"Times New Roman",serif;line-height:1;min-height:1.05em;letter-spacing:-.02em;white-space:nowrap}
 .chord[style]{--a:calc(100cqi - var(--room,0rem));--n:calc(var(--w) - .5 * var(--b,0));font-size:min(var(--cap),calc(var(--a) / var(--w)),max(calc((var(--a) - .6rem * var(--b,0)) / var(--n)),calc(var(--a) / (var(--n) + .75 * var(--b,0)))));box-sizing:border-box;min-height:calc(1.05 * var(--cap));padding:calc(.85 * (var(--cap) - 1em)) 0 0 .1em;margin:0 var(--room,0rem) 0 -.1em;overflow-x:clip}
 .chord.rest{color:#c5c5c5;font-style:italic;font-size:1.3em}
+.half.stop .chord{color:#bdbdbd}
 .chord .acc{font-family:STIXGeneral,"Apple Symbols","Segoe UI Symbol","Noto Music","Noto Sans Symbols 2",serif;line-height:0}
 .chord .bass{font-size:max(.5em,min(.6rem,.75em));font-weight:500;color:#4a6f96;margin-left:.22em;vertical-align:middle;letter-spacing:0;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif}
 .lyric{font-size:.68em;color:#666;margin-top:.5em;line-height:1.2;min-height:1.2em;font-style:italic;overflow-wrap:break-word}
@@ -699,6 +708,10 @@ def render(S: dict, out: str | Path | None = None) -> Path:
     tri = {(c['bar'], c['cell']): c for c in TRI['cells']}
     bass = {(c['bar'], c['cell']): c['pc_seconds'] for c in rd('bass_per_cell.json')['cells']}
     act = rd('stem_activity.json') if (a / 'stem_activity.json').exists() else {}
+    bl = rd('band_level.json') if (a / 'band_level.json').exists() else {}
+    stops = frozenset((b, k) for b, k, v in bl.get('cells', []) if v < STOP
+                      and S['chords'].get((b, k)) not in (None, 'N.C.')
+                      and bl.get('grouping') in (None, grouping))
     stale = {s: len(v) for s, v in act.items() if len(v) != len(F['downbeat_times']) - 1}
     if stale:
         print(f'warning: stem_activity.json bars {stale} != {len(F["downbeat_times"]) - 1} '
@@ -764,6 +777,9 @@ def render(S: dict, out: str | Path | None = None) -> Path:
                          'pickup, starting inside this box.')
     if split:
         legend.append('Dashed underline = the chord changes inside this cell — listen for where.')
+    if stops:
+        legend.append('<span style="color:#9a9a9a">Grey chord</span> = the band stops: no music '
+                      'under the voice (the chord is where the loop would be).')
     items = ''.join(f'<li>{x}</li>\n' for x in legend)
     doc = f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -771,7 +787,7 @@ def render(S: dict, out: str | Path | None = None) -> Path:
 <style>{css}</style></head><body>
 <h1>{name}{key}</h1>
 {top}<div class="chart">
-{rows_html(S, grid.n, per_row, flagged, split, lyr, over)}
+{rows_html(S, grid.n, per_row, flagged, split, lyr, over, stops)}
 </div>
 <section class="notes">
 <h2>Song map</h2>

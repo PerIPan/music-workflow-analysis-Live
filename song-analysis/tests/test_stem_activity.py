@@ -78,6 +78,24 @@ def main():
           len(dr) == NBARS + 1 and all(math.isfinite(v) for v in dr) and dr[-1] == 0
           and near(dr[1:9], 1.0), dr)
     check("... with a warning", "past the end" in r.stderr, r.stderr)
+
+    # band_level.json: the band (no vocals) per cell; a stop-time half-bar reads near 0
+    st = d / "stop"
+    st.mkdir()
+    half = int(SR * BAR / 2)
+    band = tone([0.5] * 8)
+    band[5 * int(SR * BAR) + half:6 * int(SR * BAR)] = 0          # bar 6, second half: stop
+    sf.write(st / "drums.wav", band, SR)
+    sf.write(st / "vocals.wav", tone([0.9] * 8), SR)              # the voice goes on
+    F = dict(downbeat_times=[k * BAR for k in range(9)], grouping=[2, 2])
+    (d / "f4.json").write_text(json.dumps(F))
+    r = subprocess.run([sys.executable, str(SCRIPT), str(st), "--foundation", str(d / "f4.json"),
+                        "--out", str(d / "s4.json")], capture_output=True, text=True)
+    bl = json.load(open(d / "band_level.json")) if (d / "band_level.json").exists() else {}
+    low = [(b, k) for b, k, v in bl.get("cells", []) if v < 0.3]
+    check("band_level.json: the band per half-bar, vocals left out; the stop cell reads ~0",
+          r.returncode == 0 and bl.get("grouping") == [2, 2] and len(bl["cells"]) == 16
+          and low == [(6, 2)], (low, r.stdout + r.stderr))
     sys.exit(1 if fails else 0)
 
 

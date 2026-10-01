@@ -211,7 +211,9 @@ def mmss(t: float) -> str:
     return f'{int(t // 60)}:{int(t % 60):02d}'
 
 
-PICKUP = 1.25      # beats: a line's first word this close before the next cell joins it
+HOLD = 0.15        # beats: the next word this far past a boundary = the word is held across
+PICKUP_FIRST = 1.25  # beats: a line's first word sung this close before the next cell joins it
+PICKUP = 2.25      # ...and, held across that one, carries on past the next if this close
 SYLLABLE = 0.5     # beats added to the push per syllable past the second (fluorescent: 1.25)
 MISHEARD = 0.2     # letter similarity a misheard word needs to stand in for the line's word
 ANTICIPATE = 0.75   # beats: a word this close before a chord change belongs to the new chord
@@ -243,6 +245,9 @@ class Grid:
                     k += 1
                 return i + 1, k
         return len(db) - 1, self.n
+
+    def next(self, c: tuple[int, int]) -> tuple[int, int]:
+        return (c[0], c[1] + 1) if c[1] < self.n else (c[0] + 1, 1)
 
     def prev(self, c: tuple[int, int]) -> tuple[int, int]:
         return (c[0], c[1] - 1) if c[1] > 1 else (c[0] - 1, self.n)
@@ -397,12 +402,16 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
         last = low
         for i, (tok, t) in enumerate(zip(toks, times)):
             reach = ANTICIPATE + SYLLABLE * max(0, syllables(tok) - 2)   # a long word takes
-            if i == 0:                         # a line's pickup on the last beat joins
-                reach = max(reach, PICKUP)     # its line on the next bar
-            c, push = grid.at(t), grid.at(t + reach * beat)        # longer to its stress
-            held = i + 1 == len(toks) or times[i + 1] >= grid.start(push) - 0.05 * beat
-            if push != c and held and i in m:  # heard words only: a guessed time can't push
-                c = push                       # held across the boundary: in the next cell
+            pickup = i == 0 and len(toks) > 1  # a line's first word, held into its next one
+            c, step = grid.at(t), 0                                 # longer to its stress
+            while i in m:                      # heard words only: a guessed time can't push
+                edge = grid.next(c)            # one boundary at a time, while the word is
+                t_e = grid.start(edge) if edge[0] < len(grid.db) else 1e9   # held across it
+                held = i + 1 == len(toks) or times[i + 1] >= t_e + HOLD * beat
+                lim = reach if not pickup else max(reach, PICKUP if step else PICKUP_FIRST)
+                if t_e - t > lim * beat or not held:
+                    break
+                c, step = edge, step + 1
             c = max(c, low)
             while c >= nxt:                              # never spill into the next line
                 c = grid.prev(c)

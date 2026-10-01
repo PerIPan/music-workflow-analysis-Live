@@ -618,6 +618,16 @@ def main():
     Fx = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
     check("'fixed': a player's placement stays whole at its cell, whatever the timing",
           Fx == {(1, 1): "so I", (1, 2): "night"}, Fx)
+    d = make_song([2, 2], 2.0, 4, ch, words=[("lover", 2.3), ("my", 2.95), ("other", 4.4),
+                                             ("then", 6.2), ("ill", 6.8), ("pick", 7.0)])
+    _, cells = build(dict(title="Held", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")],
+                          lyrics={(2, 1): ("lover", ""), (3, 1): ("my other", ""),
+                                  (4, 1): ("then ill pick", "")}), d, "held.html")
+    H = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("a line's first word held through half a bar joins the next bar ('My | other' sung "
+          "a bar later); a pickup into a word on the downbeat stays ('then I'll | pick')",
+          H == {(2, 1): "lover", (3, 1): "my other", (4, 1): "then ill", (4, 2): "pick"}, H)
     check("placement 'sung' (default): opening words stay where sung, before the anchor; "
           "'anchor' pulls them in",
           P == {(2, 2): "and this", (3, 1): "double life", (3, 2): "tonight"} and

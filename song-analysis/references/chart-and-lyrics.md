@@ -80,9 +80,13 @@ starts after the boundary, or none follows. Whisper times a word's first consona
 singers push into the beat, so "…once more" on beat 4.4 is heard on the next bar's chord,
 and "night" on beat 2.35 on the second half. A long word reaches its stress later, so its window grows half a beat per
 syllable past the second ("fluorescent", started 1.2 beats early, is heard on the next
-bar; Whisper's shorter stand-in "flowing" hid its length). A line's first word sung on the last beat (within 1¼ beats, `PICKUP`) joins its line on
-the next bar ("I'm | coming back", "Saying | we'll be"); one sung earlier (beat 2.5–3)
-stays on the second half ("And this", "All this"). A player's own placement is a
+bar; Whisper's shorter stand-in "flowing" hid its length). The push goes one half-bar boundary at a time, and only while the word is **held** across
+it (the line's next word starts 0.15 beat or more past the boundary; `HOLD`). A line's
+first word sung within 1¼ beats of the next half-bar joins it ("I'm | coming back",
+"Saying | we'll be"), and if still held carries on to the next bar ("My" on beat 2.9,
+"other" in the next bar: "My other" opens that bar). A pickup into a word on the boundary
+stays ("then I'll | pick", "Slow | jazz"); "And this…" — "this" follows in the same
+half-bar — opens the second half. A player's own placement is a
 `'fixed'` lyric (split the line, fix the word). A quick pickup into a word that is itself
 pushed stays ("so I | stepped outside"); a guessed (unheard) word never pushes. Scored
 against the player's 15 corrections: 14/15 (the miss sits in a stop bar). Whisper mishears

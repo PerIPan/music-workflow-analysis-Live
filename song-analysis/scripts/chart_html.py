@@ -199,6 +199,7 @@ def mmss(t: float) -> str:
     return f'{int(t // 60)}:{int(t % 60):02d}'
 
 
+MISHEARD = 0.2     # letter similarity a misheard word needs to stand in for the line's word
 ANTICIPATE = 0.75   # beats: a word this close before a chord change belongs to the new chord
 STOP = 0.15         # band_level.json: under this share of the median cell, the band stops
 
@@ -286,8 +287,8 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
     entries = sorted(S.get('lyrics', {}).items())
     out, over = {}, {}
     stem = lambda w: norm(w)[:4]
-    wt = sorted(((s, w['start']) for w in words or () for s in [stem(w['word'])] if s),
-                key=lambda x: x[1])
+    wt = sorted(((s, w['start'], norm(w['word'])) for w in words or ()
+                 for s in [stem(w['word'])] if s), key=lambda x: x[1])
     end = {b: b1 for _, b0, b1, *_ in S['sections'] for b in range(b0, b1 + 1)}
     first = {b: b0 for _, b0, b1, *_ in S['sections'] for b in range(b0, b1 + 1)}
     sung_at = S.get('placement', 'sung') == 'sung'   # words where sung, not pulled to anchors
@@ -310,8 +311,35 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
                if t_a - 2.5 <= wt[i][1] < t_n + 0.3]
         sm = difflib.SequenceMatcher(a=[stems[i] for i in keep], b=[wt[i][0] for i in win],
                                      autojunk=False)
-        return {keep[b.a + k]: win[b.b + k] for b in sm.get_matching_blocks()
-                for k in range(b.size)}
+        m = {keep[b.a + k]: win[b.b + k] for b in sm.get_matching_blocks()
+             for k in range(b.size)}
+        full = [norm(x) for x in lines[key][0].split()]
+        m.update(misheard(full, keep, m, win, grid.beat(key[0]) * grid.bpb))
+        return m
+
+    def misheard(full, keep, m, win, bar):
+        """Pair the line's unmatched words with Whisper's unmatched ones in the same gap
+        between exact matches, in order, by letter similarity (+0.3 for the same first
+        letter - the onset is heard best; > MISHEARD): Whisper heard 'snow jesus baby' for
+        'slow jazz is playing' - their times still place the line."""
+        out, cuts = {}, [(-1, -1)] + sorted((i, j) for i, j in m.items()) + [(len(full), None)]
+        for (i0, j0), (i1, j1) in zip(cuts, cuts[1:]):
+            a = [i for i in keep if i0 < i < i1]
+            b = [j for j in win if j > j0 and (j1 is None or j < j1)
+                 and (j0 < 0 or j1 is not None or wt[j][1] - wt[j0][1] <= bar)    # open ends:
+                 and (j1 is None or j0 >= 0 or wt[j1][1] - wt[j][1] <= bar)]      # a bar at most
+            if not a or not b:
+                continue
+            best = [[(0.0, ())] * (len(b) + 1) for _ in range(len(a) + 1)]
+            for x in range(1, len(a) + 1):        # ordered pairing, most similarity in total
+                for y in range(1, len(b) + 1):
+                    u, v = full[a[x - 1]], wt[b[y - 1]][2]   # the onset is heard best:
+                    r = difflib.SequenceMatcher(a=u, b=v).ratio() + 0.3 * (u[:1] == v[:1])
+                    take = (best[x - 1][y - 1][0] + r, best[x - 1][y - 1][1] + ((x - 1, y - 1),)) \
+                        if r > MISHEARD else (-1, ())
+                    best[x][y] = max(best[x - 1][y], best[x][y - 1], take, key=lambda v: v[0])
+            out.update({a[x]: b[y] for x, y in best[-1][-1][1]})
+        return out
 
     onset = lambda m, key: abs(wt[min(m.values())][1] - grid.start(key))
     used = -1                                    # index in wt of the last word matched

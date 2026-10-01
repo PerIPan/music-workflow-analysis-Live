@@ -80,7 +80,11 @@ starts after the boundary, or none follows. Whisper times a word's first consona
 singers push into the beat, so "…once more" on beat 4.4 is heard on the next bar's chord,
 and "night" on beat 2.35 on the second half. A quick pickup into a word that is itself
 pushed stays ("so I | stepped outside"); a guessed (unheard) word never pushes. Scored
-against the player's 15 corrections: 14/15 (the miss sits in a stop bar). Lyric pages can
+against the player's 15 corrections: 14/15 (the miss sits in a stop bar). Whisper mishears
+("snow jesus baby" for "slow jazz is playing", "slipped" for "stepped"): words left
+unmatched are paired in order with Whisper's unmatched words in the same gap, by letter
+similarity plus the onset letter (heard best), and at a line's open ends only within a
+bar — so a misheard bridge still gets its real times. Lyric pages can
 also drop sung words ("Coming back…" sung "I'm coming back…"): `align_lyrics.py` prints
 `SUNG, NOT IN THE TEXT` for Whisper words just before a line that no lyric word took —
 check by ear and add them to lyrics.txt.

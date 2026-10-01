@@ -583,6 +583,15 @@ def main():
                           sections=[("Verse", 1, 4, "verse", "")], lyrics=lyr,
                           placement="anchor"), d, "anchored.html")
     A = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    d = make_song([2, 2], 2.0, 4, ch, words=[("coming", 2.2), ("snow", 2.6), ("jesus", 3.3),
+                                             ("baby", 4.6)])
+    _, cells = build(dict(title="Heard", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")],
+                          lyrics={(2, 2): ("slow jazz is playing", "")}), d, "misheard.html")
+    M = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("a misheard line is placed by its stand-ins in order, onset letter first: "
+          "'snow jesus baby' times 'slow jazz is playing'",
+          M == {(2, 1): "slow", (2, 2): "jazz is", (3, 1): "playing"}, M)
     check("placement 'sung' (default): opening words stay where sung, before the anchor; "
           "'anchor' pulls them in",
           P == {(2, 2): "and this", (3, 1): "double life", (3, 2): "tonight"} and

@@ -371,7 +371,9 @@ it; a player on their instrument answers in seconds. After rendering, run
 `python3 scripts/chart_questions.py gen_v1.py` (the open cells: chart chord, what
 lv-chordia, the triads and the bass heard, the parallel section's chord) and ask the
 player directly, up to four cells per round, the chart's chord first; ask the same way
-about `SUNG, NOT IN THE TEXT` words and any line Whisper misheard. Put each answer in the
+about `SUNG, NOT IN THE TEXT` words and the lines it lists as `placement check` (Whisper
+heard under half of them — on Body Heat the bridge, placed one to two beats early, line
+after line, until the player pinned each word: `'fixed'` lyrics). Put each answer in the
 data file (a fix in `chords`, the cell in `verified`, a word in the lyrics), re-render, and
 say in `provenance` what the player checked. On Body Heat six cells took one round, and
 the chart printed with no "?".

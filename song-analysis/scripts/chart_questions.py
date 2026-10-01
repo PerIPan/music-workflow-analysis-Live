@@ -64,6 +64,17 @@ def questions(S: dict, a: Path) -> list[dict]:
     return out
 
 
+def weak_lines(a: Path, share: float = 0.5) -> list[dict]:
+    """Lines Whisper heard less than `share` of (lyrics_aligned.json 'matched'): their words
+    are placed by misheard stand-ins or guesses - ask the player where they fall (a bridge
+    heard as 'snow jesus baby' came out one to two beats early, line after line)."""
+    p = a / 'lyrics_aligned.json'
+    lines = json.loads(p.read_text()).get('lines', []) if p.exists() else []
+    return [dict(where=l.get('where'), matched=l.get('matched'),
+                 start=' '.join(l['text'].split()[:3]))
+            for l in lines if (l.get('matched') or 0) < share]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('data', help='the chart data file, e.g. gen_v1.py')
@@ -83,6 +94,11 @@ def main() -> None:
               f"ask: {' / '.join(q['options'])}?")
     if len(qs) > a.max:
         print(f'... {len(qs) - a.max} more (--max)')
+    weak = weak_lines(folder / 'analysis')
+    for w in weak:
+        at = 'bar %d.%d' % tuple(w['where']) if w['where'] else 'unplaced'
+        print(f"placement check: the line starting '{w['start']}…' ({at}) - Whisper heard "
+              f"{w['matched']:.0%} of its words; ask where each word falls")
     if a.json:
         Path(a.json).write_text(json.dumps(qs, indent=1))
 

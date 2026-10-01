@@ -57,4 +57,11 @@ check('the parallel section counted from its end when it is longer (turnaround 4
       q.get('parallel') == ['F#m7'], q.get('parallel'))
 S['verified'] += [(2, 1), (4, 2)]
 check('nothing open: no questions', questions(S, a) == [])
+from chart_questions import weak_lines  # noqa: E402
+(a / 'lyrics_aligned.json').write_text(json.dumps({'lines': [
+    dict(text='heard every word here', matched=1.0, where=[1, 1]),
+    dict(text='slow jazz is playing', matched=0.25, where=[3, 2])]}))
+W = weak_lines(a)
+check('a line Whisper heard under half of is a placement question (first words, where)',
+      W == [dict(where=[3, 2], matched=0.25, start='slow jazz is')], W)
 sys.exit(1 if fails else 0)

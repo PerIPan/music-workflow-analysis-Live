@@ -552,13 +552,19 @@ def main():
     check("CLI: a malformed analysis file: exit 1, no traceback", r.returncode == 1
           and "chart_html: KeyError" in r.stderr and "Traceback" not in r.stderr, r.stderr)
     # ---------------------------------------------------- the push and the band's stops
-    _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
-                  {(1, 1): ("made a call to my other life", "")},
-                  [("made", 0.1), ("a", 0.4), ("call", 0.6), ("to", 1.2), ("my", 1.5),
-                   ("other", 1.9), ("life", 2.3)], "push.html")
-    check("a word sung just before the change (within an eighth) lands on the next chord; "
-          "one an eighth and more before stays",
-          P == {(1, 1): "made a call", (1, 2): "to my", (2, 1): "other life"}, P)
+    ch = {(b, c): ("Cmaj7" if b % 2 else "Em") for b in range(1, 5) for c in (1, 2)}
+    d = make_song([2, 2], 2.0, 4, ch, words=[("made", 0.1), ("a", 0.4), ("call", 0.75),
+                                             ("to", 1.2), ("my", 1.5), ("other", 1.7),
+                                             ("life", 2.3), ("once", 3.4), ("more", 3.7)])
+    _, cells = build(dict(title="Push", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")],
+                          lyrics={(1, 1): ("made a call to my other life", ""),
+                                  (2, 2): ("once more", "")}), d, "push.html")
+    P = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("a word sung within a dotted eighth of a chord change lands on the new chord; one "
+          "earlier stays; between two cells of one chord nothing moves",
+          P == {(1, 1): "made a call", (1, 2): "to my", (2, 1): "other life",
+                (2, 2): "once", (3, 1): "more"}, P)
     ch = {(b, c): ("N.C." if b == 4 else "Am") for b in range(1, 5) for c in (1, 2)}
     d = make_song([2, 2], 2.0, 4, ch)
     (d / "analysis" / "band_level.json").write_text(json.dumps(

@@ -197,7 +197,7 @@ def mmss(t: float) -> str:
     return f'{int(t // 60)}:{int(t % 60):02d}'
 
 
-ANTICIPATE = 0.5    # beats: a word this close before the next cell belongs to its chord
+ANTICIPATE = 0.75   # beats: a word this close before a chord change belongs to the new chord
 STOP = 0.3          # band_level.json: under this share of the median cell, the band stops
 
 
@@ -273,10 +273,10 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
     sung line needs when they start nearer that line's anchor than its own (Whisper heard a
     repeat once): it then counts as unheard, a beat per word. Words sung before the line's
     anchor cell are pulled into it (the chord the phrase resolves into), and nothing spills
-    past the next line's anchor or out of the line's section. A word starting within an
-    eighth (ANTICIPATE beats) of the next cell is sung into that cell's chord - the push
-    a player hears on the change, not the consonant Whisper times. With no words, every
-    line stays whole."""
+    past the next line's anchor or out of the line's section. A word starting within a
+    dotted eighth (ANTICIPATE beats) of a chord change is sung into the new chord - the
+    push a player hears on the change, not the consonant Whisper times; between two cells
+    of one chord nothing moves. With no words, every line stays whole."""
     entries = sorted(S.get('lyrics', {}).items())
     out, over = {}, {}
     stem = lambda w: norm(w)[:4]
@@ -340,7 +340,10 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
                 times[i] = t_a + beat * i
         last = key
         for tok, t in zip(toks, times):
-            c = max(grid.at(t + ANTICIPATE * beat), key)   # a push lands on the next chord
+            c, push = grid.at(t), grid.at(t + ANTICIPATE * beat)
+            if push != c and S['chords'].get(push) != S['chords'].get(c):
+                c = push                                 # pushed into the chord change
+            c = max(c, key)
             while c >= nxt:                              # never spill into the next line
                 c = grid.prev(c)
             c = max(c, last)                             # words stay in sung order

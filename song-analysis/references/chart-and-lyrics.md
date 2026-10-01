@@ -78,12 +78,13 @@ Chart:   [A♭]                              |[E♭]    "Pickup words here, / an
                                             ^ phrase anchored at the E♭ change
 ```
 
-**Inside a line, the same holds word by word: a word sung within an eighth before a chord
-change belongs to the new chord.** Singers push into the change, and Whisper times the
-word's first consonant, so a word that "starts on the E minor" for the player sits a 16th
-early on the clock. The renderer moves it (`ANTICIPATE`, half a beat). Found on a 4/4 loop
-where every line's last words ("…other life", "…other room") start on beat 4.8 and the
-player hears them on the next chord.
+**Inside a line, the same holds word by word: a word sung within a dotted eighth before a
+chord change belongs to the new chord.** Singers push into the change, and Whisper times
+the word's first consonant, so a word that "starts on the E minor" for the player sits a
+16th or an eighth early on the clock. The renderer moves it (`ANTICIPATE`, ¾ beat) — only
+across a chord change; between two cells of one chord words stay where sung. Found on a
+4/4 loop where the player heard line endings on the next chord: words on beat 4.8 and
+4.4 ("…once more" belongs to the next bar's chord).
 
 **Stops.** Where the band drops out under the voice (a stop-time break), the chord stays
 in its cell but is greyed, so the band knows to stop rather than play the loop through.

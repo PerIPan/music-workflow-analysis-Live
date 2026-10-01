@@ -44,7 +44,9 @@ Builds a Live Session from a song that `song-analysis` has finished:
 3. **Tempo:** keep [the song's mean tempo], round it, or a new BPM. A bar stretched more
    than ±15% smears the vocal: the plan stops with NEEDS A DECISION and names the bars.
 4. **Stems kept:** [vocals]; add drums, bass or other to keep them (no new part is written
-   for a kept role).
+   for a kept role). A guitar- or piano-led song: offer `guitar` / `piano` — they come from
+   the extra `htdemucs_6s` run (song-analysis Phase 2; run it first if missing). A guitar
+   track playing the chart's chords is the other way: the keys part on a guitar sound.
 
 Say the plan back in one line before building.
 

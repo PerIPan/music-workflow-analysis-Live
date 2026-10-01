@@ -34,7 +34,7 @@ demucs -n htdemucs_ft -d mps -o stems /tmp/<song>.wav     # demucs 4.1.0, torch 
 | `htdemucs_ft -d mps` (demucs 4.1, torch 2.14) | 66 s for a 2-min song (4.0; 4.1 ~17% faster) | default |
 | `mlx-demucs` (plain htdemucs) | 28 s for a 4-min song | batches; quality slightly below `_ft` |
 | `demucs-mlx -n htdemucs_ft` | 96 s for the same 2-min song | never — slower than torch MPS, same output (22–29 dB SNR) |
-| `htdemucs_6s` | — | isolating guitar/piano only; never for bass (bleeds keys into it) |
+| `htdemucs_6s` | — | run **after** `htdemucs_ft` when the song carries guitar or piano; keep only `guitar.wav` / `piano.wav`; never for bass (bleeds keys into it) |
 | BS-RoFormer-SW 6-stem (`audio-separator`) | 0.67× real time | a real piano/guitar stem matters; no chord gain (92.1 vs 91.5%), 699 MB, licence undeclared |
 
 `mlx-demucs`: call its venv binary directly — `uv run mlx-demucs` re-resolves dependencies

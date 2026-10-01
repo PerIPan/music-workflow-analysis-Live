@@ -39,12 +39,14 @@ sys.path.insert(0, str(HERE.parents[1] / 'song-analysis' / 'scripts'))
 from chordsym import note_pc, parse  # noqa: E402
 
 PRESETS = ('house', 'synth-pop', 'lo-fi', 'garage-punk', 'as-analysed')
-STEMS = ('vocals', 'drums', 'bass', 'other')
+STEMS = ('vocals', 'drums', 'bass', 'other', 'guitar', 'piano')
+SIX = ('guitar', 'piano')          # only from the extra htdemucs_6s run (song-analysis Phase 2)
 PART_OF_STEM = {'drums': 'drums', 'bass': 'bass', 'other': 'keys'}   # kept stem -> no new part
 TRACK_NAME = {'vocals': 'VOX', 'drums': 'DRUMS', 'bass': 'BASS', 'other': 'KEYS/GTR',
-              'mix': 'MIX'}
+              'guitar': 'GTR', 'piano': 'PIANO', 'mix': 'MIX'}
 WARP_MODE = {'vocals': 'complex_pro', 'drums': 'beats', 'bass': 'complex_pro',
-             'other': 'complex_pro', 'mix': 'complex_pro'}
+             'other': 'complex_pro', 'guitar': 'complex_pro', 'piano': 'complex_pro',
+             'mix': 'complex_pro'}
 KIND_TIER = {'intro': 1, 'verse': 2, 'post': 2, 'chorus': 3, 'bridge': 1, 'inst': 2,
              'outro': 1}
 SILENT_DB = -45.0
@@ -72,13 +74,13 @@ def find_chart(song: Path, chart: str | None) -> Path:
     return found[-1]
 
 
-def find_stems(song: Path, need: list[str]) -> Path:
-    base = song / 'stems' / 'htdemucs_ft'
+def find_stems(song: Path, need: list[str], model: str = 'htdemucs_ft') -> Path:
+    base = song / 'stems' / model
     dirs = [d for d in sorted(base.glob('*')) if d.is_dir()
             and all((d / f'{s}.wav').is_file() for s in need)]
     if not dirs:
         fail(f'no stems folder under {base} with {", ".join(s + ".wav" for s in need)}: '
-             'run song-analysis Phase 2 (htdemucs_ft)')
+             f'run song-analysis Phase 2 ({model})')
     if len(dirs) > 1:
         fail(f'several stem folders under {base}: {[d.name for d in dirs]} - keep one')
     return dirs[0]
@@ -181,7 +183,9 @@ def build(a: argparse.Namespace) -> dict:
     bad = [s for s in keep if s not in STEMS]
     if bad or not keep:
         fail(f'--keep takes {",".join(STEMS)}; got {a.keep!r}')
-    stem_dir = find_stems(song, keep)
+    stem_dir = find_stems(song, [s for s in keep if s not in SIX])
+    six = [s for s in keep if s in SIX]
+    six_dir = find_stems(song, six, 'htdemucs_6s') if six else None
 
     # tempo
     outliers = set(F.get('tempo_outlier_bars', []))
@@ -208,7 +212,7 @@ def build(a: argparse.Namespace) -> dict:
     # stems + pre-roll
     stems = []
     for s in keep:
-        p = (stem_dir / f'{s}.wav').resolve()
+        p = ((six_dir if s in SIX else stem_dir) / f'{s}.wav').resolve()
         length, peak = wav_info(p, db[0])
         stems.append(dict(name=s, role='keep', path=str(p), length_s=round(length, 4),
                           peak_before_db=None if peak is None else round(peak, 1),
@@ -329,7 +333,9 @@ def main() -> None:
     ap.add_argument('--mode', choices=('remix', 'sketch'), default='remix')
     ap.add_argument('--preset', choices=PRESETS, help='default house (sketch: as-analysed)')
     ap.add_argument('--tempo', default='keep', help='keep, round or a BPM')
-    ap.add_argument('--keep', default='vocals', help='original stems to keep, e.g. vocals,bass')
+    ap.add_argument('--keep', default='vocals',
+                    help='original stems to keep, e.g. vocals,bass; guitar/piano come from '
+                         'stems/htdemucs_6s (song-analysis Phase 2, guitar or piano songs)')
     ap.add_argument('--chart', help='chart data file (default: the highest gen_v<N>.py)')
     ap.add_argument('--preroll', default='auto', help="auto or whole bars before bar 1")
     ap.add_argument('--stretch-limit', type=float, default=0.15)

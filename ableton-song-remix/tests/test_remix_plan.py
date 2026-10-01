@@ -78,6 +78,21 @@ def main():
     check('kept drums -> no new drums', p['parts'] == ['bass', 'keys'])
     check('tempo round is whole', p['tempo']['live'] == round(p['tempo']['keep']))
 
+    # a guitar song: the guitar stem comes from the extra htdemucs_6s run
+    r, _ = plan(s, '--keep', 'vocals,guitar')
+    check('kept guitar without htdemucs_6s -> refused, names the run',
+          r.returncode != 0 and 'htdemucs_6s' in r.stdout + r.stderr, r.stdout + r.stderr)
+    ft = next((s / 'stems' / 'htdemucs_ft').iterdir())
+    six = s / 'stems' / 'htdemucs_6s' / ft.name
+    six.mkdir(parents=True)
+    shutil.copy(ft / 'vocals.wav', six / 'guitar.wav')
+    r, p = plan(s, '--keep', 'vocals,guitar')
+    g = next((x for x in p['stems'] if x['name'] == 'guitar'), {}) if p else {}
+    check('kept guitar: from htdemucs_6s, its own track; vocals still from htdemucs_ft',
+          r.returncode == 0 and '/htdemucs_6s/' in g.get('path', '') and
+          g.get('track_name') == 'GTR · orig' and
+          '/htdemucs_ft/' in p['stems'][0]['path'], r.stdout + r.stderr)
+
     # sketch
     r, p = plan(s, '--mode', 'sketch')
     mix = [x for x in p['stems'] if x['role'] == 'ref'] if p else []

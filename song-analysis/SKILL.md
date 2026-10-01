@@ -113,9 +113,23 @@ with the mode test (`references/modal-theory.md`).
 
 ## Phase 2 — Stems
 
+**Decide the split from the purpose, early** (ask with the inputs if unclear: chart only,
+drums/bass, or the guitar/piano parts too — e.g. for a Live sketch or remix):
+
+| Purpose / song | Run | Keep |
+|---|---|---|
+| chart, drums or bass only; no guitar/piano lead | `htdemucs_ft` (4 stems) | all four |
+| the song carries guitar or piano (or the user wants those parts) | `htdemucs_ft`, **then** `htdemucs_6s` | the four from `_ft` + only `guitar.wav` / `piano.wav` from `_6s` |
+
+The 4-stem `_ft` is the cleaner split (vocals, drums, bass): never replace it with the
+6-stem run, which bleeds keys into the bass. In `other.wav` the guitars, keys and pads are
+one mix, so a guitar-led song needs the extra run.
+
 ```bash
 ffmpeg -v error -i <song.mp3> -c:a pcm_s16le /tmp/<song>.wav     # decode first (see below)
 demucs -n htdemucs_ft -d mps -o stems /tmp/<song>.wav   # → $ST/{bass,drums,vocals,other}.wav
+demucs -n htdemucs_6s -d mps -o stems /tmp/<song>.wav   # guitar/piano songs: keep only
+                                                        # stems/htdemucs_6s/<song>/{guitar,piano}.wav
 ```
 
 **Decode MP3 to WAV first:** demucs 4.1 reads MP3 without the gapless trim, so every stem

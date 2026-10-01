@@ -591,7 +591,7 @@ def main():
     M = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
     check("a misheard line is placed by its stand-ins in order, onset letter first: "
           "'snow jesus baby' times 'slow jazz is playing'",
-          M == {(2, 1): "slow", (2, 2): "jazz is", (3, 1): "playing"}, M)
+          M == {(2, 2): "slow jazz is", (3, 1): "playing"}, M)
     d = make_song([2, 2], 2.0, 4, ch, words=[("lights", 2.2), ("are", 2.45), ("fluorescent", 3.4),
                                              ("and", 4.4)])
     _, cells = build(dict(title="Long", artist="Nobody", words="words.json", chords=ch,
@@ -601,6 +601,23 @@ def main():
     check("a long word reaches its stress later: 'fluorescent' 1.2 beats early still lands "
           "on the next bar (half a beat more push per syllable past the second)",
           Lg == {(2, 1): "lights are", (3, 1): "fluorescent and"}, Lg)
+    d = make_song([2, 2], 2.0, 4, ch, words=[("night", 2.2), ("we", 3.45), ("coming", 4.4),
+                                             ("and", 5.3), ("this", 5.5), ("life", 6.1)])
+    _, cells = build(dict(title="Pick", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")],
+                          lyrics={(2, 1): ("night", ""), (3, 1): ("we coming", ""),
+                                  (4, 1): ("and this life", "")}), d, "linepickup.html")
+    Pk = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("a line's first word on the last beat joins its line on the next bar; one sung "
+          "earlier (beat 3) stays in its half",
+          Pk == {(2, 1): "night", (3, 1): "we coming", (3, 2): "and this", (4, 1): "life"}, Pk)
+    d = make_song([2, 2], 2.0, 4, ch, words=[("so", 1.0), ("I", 1.3)])
+    _, cells = build(dict(title="Fix", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")],
+                          lyrics={(1, 1): ("so I", ""), (1, 2): ("night", "fixed")}), d, "fixed.html")
+    Fx = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("'fixed': a player's placement stays whole at its cell, whatever the timing",
+          Fx == {(1, 1): "so I", (1, 2): "night"}, Fx)
     check("placement 'sung' (default): opening words stay where sung, before the anchor; "
           "'anchor' pulls them in",
           P == {(2, 2): "and this", (3, 1): "double life", (3, 2): "tonight"} and

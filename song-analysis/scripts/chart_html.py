@@ -61,6 +61,9 @@ kind or a Harte chord label is refused with the reason.
                       ''                      sung line, split over the cells where sung
                       'adlib'                 kept whole in its cell, greyed (beside the
                                               words of a line sung there)
+                      'fixed'                 a player's placement: kept whole in its cell,
+                                              whatever the timing says (split a line and
+                                              fix the word a player moved)
                       'pk pk-<section kind>'  the next section's pickup, overlaid in this
                                               cell (beside the line's closing words) in
                                               that section's colour; any other kind is
@@ -206,6 +209,7 @@ def mmss(t: float) -> str:
     return f'{int(t // 60)}:{int(t % 60):02d}'
 
 
+PICKUP = 1.25      # beats: a line's first word this close before the next cell joins it
 SYLLABLE = 0.5     # beats added to the push per syllable past the second (fluorescent: 1.25)
 MISHEARD = 0.2     # letter similarity a misheard word needs to stand in for the line's word
 ANTICIPATE = 0.75   # beats: a word this close before a chord change belongs to the new chord
@@ -355,6 +359,10 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
         if kind == 'adlib' or 'pk' in kind:
             over[key] = (text, kind)
             continue
+        if kind == 'fixed':                      # the player put it here: no timing
+            out.setdefault(key, []).append(text)
+            floor = key
+            continue
         if not words:
             out[key] = [text]
             continue
@@ -387,6 +395,8 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
         last = low
         for i, (tok, t) in enumerate(zip(toks, times)):
             reach = ANTICIPATE + SYLLABLE * max(0, syllables(tok) - 2)   # a long word takes
+            if i == 0:                         # a line's pickup on the last beat joins
+                reach = max(reach, PICKUP)     # its line on the next bar
             c, push = grid.at(t), grid.at(t + reach * beat)        # longer to its stress
             held = i + 1 == len(toks) or times[i + 1] >= grid.start(push) - 0.05 * beat
             if push != c and held and i in m:  # heard words only: a guessed time can't push
@@ -596,7 +606,7 @@ KEYS = {'title', 'artist', 'sections', 'chords', 'folder', 'out', 'key_short', '
         'words', 'bass_notes', 'verified', 'placement', 'grouping', 'bars_per_row', 'duration_s', 'subline',
         'facts', 'provenance', 'map_note', 'notes', 'method'}
 KINDS = ('intro', 'verse', 'post', 'chorus', 'bridge', 'inst', 'outro')
-LYRIC_KINDS = ('', 'adlib', *(f'pk pk-{k}' for k in KINDS))
+LYRIC_KINDS = ('', 'adlib', 'fixed', *(f'pk pk-{k}' for k in KINDS))
 NOTE_CLASSES = ('', 'open', 'reading')
 TEXT_KEYS = ('title', 'artist', 'out', 'key_short', 'words', 'subline', 'provenance',
              'map_note', 'method')
@@ -651,7 +661,7 @@ def check_song(S: dict) -> None:
         raise ValueError(f'lyrics values must be (text, kind) tuples: {bad[:4]}')
     bad = [(k, v[1]) for k, v in S.get('lyrics', {}).items() if v[1] not in LYRIC_KINDS]
     if bad:
-        raise ValueError("a lyric's kind is '' (a sung line), 'adlib' or 'pk pk-<next "
+        raise ValueError("a lyric's kind is '' (a sung line), 'adlib', 'fixed' or 'pk pk-<next "
                          f"section's kind>' ({', '.join(KINDS)}): {bad[:4]}")
     bad = [k for k, c in S['chords'].items() if not isinstance(c, str) or ':' in c
            or c in ('N', 'X')]
@@ -822,8 +832,10 @@ def render(S: dict, out: str | Path | None = None) -> Path:
         cells_legend(grouping, UNITS.get(F.get('pulse_unit'), 'beat')),
         '<b>Chord</b> = guitar/piano shape; <span style="color:#4a6f96">(D)</span> = bass note '
         "when it isn't the root.",
-        "Lyrics sit where they're sung; pickup syllables are pulled into the chord the phrase "
-        'lands on. Empty lyric = hold.' if words is not None else
+        ("Lyrics sit where they're sung; a word held into the next chord sits with it. Empty "
+         'lyric = hold.' if S.get('placement', 'sung') == 'sung' else
+         "Lyrics sit where they're sung; pickup syllables are pulled into the chord the phrase "
+         'lands on. Empty lyric = hold.') if words is not None else
         'Each lyric line sits at the chord the phrase lands on. Empty lyric = hold.',
         f'<span style="color:#b03030">?</span> + dotted box = this '
         f"{'half-bar' if halves else 'cell'}'s own reading names a different chord — check by "

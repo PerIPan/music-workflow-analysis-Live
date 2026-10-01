@@ -78,6 +78,11 @@ Chart:   [A♭]                              |[E♭]    "Pickup words here, / an
                                             ^ phrase anchored at the E♭ change
 ```
 
+**Don't anchor a line at its section's first bar by default.** A chorus that starts on a
+pickup ("And this…", "All this…") sung over the loop's first chord lands on the next
+one: anchor it there and the pickup words follow (a player moved two such lines from
+the Cmaj7 to the Em). Check each line's first stressed word against the chord change.
+
 **Inside a line, the same holds word by word: a word sung within a dotted eighth before a
 chord change belongs to the new chord.** Singers push into the change, and Whisper times
 the word's first consonant, so a word that "starts on the E minor" for the player sits a

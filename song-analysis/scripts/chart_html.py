@@ -28,8 +28,8 @@ Usage (python3, standard library only):
 
 Reads <folder>/analysis/: foundation.json (downbeat_times, grouping, pulse_unit),
 chords_lv.json, chord_proposal.json, bass_per_cell.json; if present stem_activity.json
-(stem_activity.py; the song map's stem meters), band_level.json (a bar where a cell
-drops under STOP of the median is a stop bar: its chords are greyed) and the Whisper words file
+(stem_activity.py; the song map's stem meters), band_level.json (a cell where the band
+drops under STOP of the median is greyed; its bar gets no "?") and the Whisper words file
 named by 'words'.
 
 SONG, the dict the data file defines. Cells are keyed (bar, cell): bars count from 1 on the
@@ -773,10 +773,11 @@ def render(S: dict, out: str | Path | None = None) -> Path:
     bass = {(c['bar'], c['cell']): c['pc_seconds'] for c in rd('bass_per_cell.json')['cells']}
     act = rd('stem_activity.json') if (a / 'stem_activity.json').exists() else {}
     bl = rd('band_level.json') if (a / 'band_level.json').exists() else {}
-    stop_bars = {b for b, k, v in bl.get('cells', []) if v < STOP
+    out_cells = {(b, k) for b, k, v in bl.get('cells', []) if v < STOP
                  and bl.get('grouping') in (None, grouping)}
-    stops = frozenset(k for k, ch in S['chords'].items()      # a bar with a stop: all of it
-                      if k[0] in stop_bars and ch != 'N.C.')
+    stops = frozenset(k for k in out_cells                    # the half-bars the band is out
+                      if S['chords'].get(k) not in (None, 'N.C.'))
+    stop_bars = {b for b, _ in out_cells}
     stale = {s: len(v) for s, v in act.items() if len(v) != len(F['downbeat_times']) - 1}
     if stale:
         print(f'warning: stem_activity.json bars {stale} != {len(F["downbeat_times"]) - 1} '
@@ -793,7 +794,8 @@ def render(S: dict, out: str | Path | None = None) -> Path:
             words = None
 
     verified = {tuple(k) for k in S.get('verified', ())}
-    quiet = verified | stops            # a stop bar: nothing to read, the chart keeps the loop
+    quiet = verified | {k for k in S['chords'] if k[0] in stop_bars}   # a stop bar: little
+    #                                     to read; the chart keeps the loop
     flagged, split = flags(S, lv, tri, bass) - quiet, splits(S, lv) - quiet
     lyr, over = distribute(S, grid, words)
     st = stats(S, lv, tri)
@@ -846,8 +848,8 @@ def render(S: dict, out: str | Path | None = None) -> Path:
     if split:
         legend.append('Dashed underline = the chord changes inside this cell — listen for where.')
     if stops:
-        legend.append('<span style="color:#9a9a9a">Grey chords</span> = the band stops in this '
-                      'bar (at most a hit or a ringing chord): the voice carries on alone.')
+        legend.append('<span style="color:#9a9a9a">Grey chord</span> = the band is out for this '
+                      'half-bar: the voice carries on alone (the chord shows where the loop is).')
     items = ''.join(f'<li>{x}</li>\n' for x in legend)
     doc = f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

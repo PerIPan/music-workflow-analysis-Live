@@ -630,10 +630,10 @@ def main():
     doc, cells = build(dict(title="Stops", artist="Nobody", chords=ch,
                             sections=[("Verse", 1, 4, "verse", "")]), d, "stops.html")
     C = at(cells, 2)
-    check("a bar where the band drops under 0.15 of its median is greyed whole (a stop bar); "
-          "a quiet 0.3 and N.C. bars are not",
-          [k for k, v in C.items() if "stop" in v[0].split()] == [(1, 1), (1, 2)] and
-          "Grey chords" in doc, [k for k, v in C.items() if "stop" in v[0].split()])
+    check("a half-bar where the band drops under 0.15 of its median is greyed, not its "
+          "played half; a quiet 0.3 and N.C. cells are not",
+          [k for k, v in C.items() if "stop" in v[0].split()] == [(1, 2)] and
+          "Grey chord" in doc, [k for k, v in C.items() if "stop" in v[0].split()])
     doc, _ = build(dict(title="Stops", artist="Nobody", chords=ch,
                         sections=[("Verse", 1, 4, "verse", "")]), make_song([2, 2], 2.0, 4, ch),
                    "nostops.html")

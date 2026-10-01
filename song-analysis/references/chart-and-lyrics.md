@@ -106,12 +106,14 @@ sung:    [A♭] "Pickup words here,"        |[E♭] "and the phrase"     [A♭] 
 anchor:  [A♭]                              |[E♭] "Pickup words here, / and the phrase"  [A♭] "ends"
 ```
 
-**Stops.** Where the band drops out under the voice (a stop-time break), the chords stay
-(they follow the loop) but the whole bar is greyed, so the band knows to stop rather than
-play through, and it gets no "?" (nothing to read). `stem_activity.py` measures each cell
-as the median of 50 ms frames (`band_level.json`, the stems without vocals vs the median
-cell), so a hit or a ringing chord doesn't count as playing; under 0.15 is a stop. On the
-first song the stops read 0.01–0.02, a quiet verse's played cells 0.3 and up.
+**Stops.** Where the band drops out under the voice (a stop-time break), the chord stays
+(it shows where the loop is) but is greyed, half-bar by half-bar — the band often plays
+the first half and stops for the second ("Gotta | feel your body heat": a player first
+asked for the whole bar, then heard the first half played and asked for it back). A bar
+with a stop gets no "?". `stem_activity.py` measures each cell as the median of 50 ms
+frames (`band_level.json`, the stems without vocals vs the median cell), so a hit or a
+ringing chord doesn't count as playing; under 0.15 is a stop. On the first song the stops
+read 0.01–0.02, a quiet verse's played cells 0.3 and up.
 
 ### Rule 2: Empty cells = sustain or rest
 

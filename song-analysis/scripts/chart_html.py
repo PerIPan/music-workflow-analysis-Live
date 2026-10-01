@@ -553,7 +553,7 @@ h1{font-size:1.15em;margin:0 0 .05em;font-weight:600}
 .prov b{color:#444}
 .chart{overflow-x:auto}
 .row{margin:.15em 0;page-break-inside:avoid;min-width:600px}
-.row.section-start{margin-top:.9em;padding-top:.5em;border-top:2px solid #d8d8d4}
+.row.section-start{margin-top:1.4em;padding-top:.6em;border-top:2px solid #d8d8d4}
 .row.section-start:first-of-type{margin-top:.2em;padding-top:0;border-top:none}
 .row.section-start .row-name{font-size:.92em;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .row-head{display:flex;align-items:baseline;gap:.6em;margin:0 0 .12em .05em;flex-wrap:wrap}
@@ -606,7 +606,7 @@ td.sn.bridge{color:#5b9a52} td.sn.post{color:#b58632} td.sn.intro,td.sn.outro,td
  .lyric{-webkit-hyphens:auto;hyphens:auto;hyphenate-limit-chars:10 5 5;-webkit-hyphenate-limit-before:5;-webkit-hyphenate-limit-after:5}}
 @media print{body{max-width:100%;margin:0;padding:.3em}
  .chart{overflow:visible}.row{min-width:0}
- .row.section-start{margin-top:.4em;padding-top:.25em}
+ .row.section-start{margin-top:1.1em;padding-top:.45em}
  .row-meta,.row-note,.row.inst .row-name,.row.outro .row-name,.row.intro .row-name{color:#666}
  .row.post .row-name{color:#8f6420}.row.bridge .row-name{color:#437a3b}
  .half{min-height:3.4em;padding:.3em .35em;--cap:1.55rem}.chord{font-size:1.55em}.lyric{font-size:.62em}

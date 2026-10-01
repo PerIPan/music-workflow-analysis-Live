@@ -559,7 +559,7 @@ def main():
     # ---------------------------------------------------- the push and the band's stops
     ch = {(b, c): ("Cmaj7" if b % 2 else "Em") for b in range(1, 5) for c in (1, 2)}
     d = make_song([2, 2], 2.0, 4, ch, words=[("made", 0.1), ("a", 0.4), ("call", 0.55),
-                                             ("to", 1.2), ("my", 1.5), ("other", 1.7),
+                                             ("to", 1.2), ("my", 1.5), ("other", 1.92),
                                              ("life", 2.3), ("once", 3.4), ("more", 3.7)])
     _, cells = build(dict(title="Push", artist="Nobody", words="words.json", chords=ch,
                           sections=[("Verse", 1, 4, "verse", "")],

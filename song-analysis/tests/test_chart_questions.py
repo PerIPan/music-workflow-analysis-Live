@@ -64,4 +64,15 @@ from chart_questions import weak_lines  # noqa: E402
 W = weak_lines(a)
 check('a line Whisper heard under half of is a placement question (first words, where)',
       W == [dict(where=[3, 2], matched=0.25, start='slow jazz is')], W)
+from chart_questions import pattern_breaks  # noqa: E402
+loop = ['F#', 'F#', 'A', 'B']
+ch = {(b, c): loop[(b - 1) % 4] for b in range(1, 25) for c in (1, 2)}
+ch[(8, 1)] = 'A'                                           # B bar charted A: readers agreed
+ch[(22, 1)] = ch[(23, 1)] = ch[(24, 1)] = 'E'              # the closing cycle: a turnaround
+S2 = dict(chords=ch, sections=[('Verse', 1, 24, 'verse', '')])
+P = [(x['bar'], x['cell'], x['chart'], x['usual']) for x in pattern_breaks(S2)]
+check("a cell breaking its section's repeating pattern is asked about; a turnaround that "
+      "closes the section is not", P == [(8, 1, 'A', 'B')], P)
+S2['verified'] = [(8, 1)]
+check('a verified break is not asked again', pattern_breaks(S2) == [])
 sys.exit(1 if fails else 0)

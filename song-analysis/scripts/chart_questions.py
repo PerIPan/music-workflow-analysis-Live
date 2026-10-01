@@ -7,7 +7,8 @@ the chart is unsure of - cells marked "?" (the readers name another root), skipp
 verified cells and stop bars - with the chart's chord, what lv-chordia, the triad reader
 and the bass heard, and the parallel section's chord when the section repeats (counted
 from the start, or from the end when the two differ in length - turnarounds close them). Ask them
-a few at a time; each answer goes back into the data file (a fix in `chords`, the cell
+a few at a time - and cells that break their section's repeating pattern even where the
+readers agree (pattern_breaks); each answer goes back into the data file (a fix in `chords`, the cell
 in `verified`), then re-render.
 
 Usage (python3, standard library only; from the song folder):
@@ -64,6 +65,43 @@ def questions(S: dict, a: Path) -> list[dict]:
     return out
 
 
+def pattern_breaks(S: dict, agree: float = 0.65, repeats: int = 3) -> list[dict]:
+    """Cells that break their section's repeating pattern: the shortest period (1, 2 or 4
+    bars) at which at least `agree` of the section's cells match their position's usual
+    chord, seen at least `repeats` times; a cell counts only when the usual chord comes at
+    its position both before and after it in the section (a break inside the pattern - a
+    turnaround or a different first cycle closes or opens it and is not asked about). A reader can
+    agree with itself and still break the pattern (a verse played F# F# A B every time but
+    charted A on one B bar - the player heard B)."""
+    verified = {tuple(k) for k in S.get('verified', [])}
+    ch = S['chords']
+    out = []
+    for name, b0, b1, *_ in S['sections']:
+        bars = list(range(b0, b1 + 1))
+        keys = [k for k in sorted(ch) if b0 <= k[0] <= b1 and ch[k] != 'N.C.']
+        for per in (1, 2, 4):
+            if len(bars) < per * repeats:
+                break
+            pos = {}
+            for k in keys:
+                pos.setdefault(((k[0] - b0) % per, k[1]), []).append(k)
+            usual = {q: max(set(ch[k] for k in ks), key=[ch[k] for k in ks].count)
+                     for q, ks in pos.items()}
+            hits = sum(ch[k] == usual[((k[0] - b0) % per, k[1])] for k in keys)
+            if keys and hits / len(keys) >= agree:
+                for q, ks in pos.items():
+                    same = [k for k in ks if ch[k] == usual[q]]
+                    if len(same) < repeats:
+                        continue
+                    out += [dict(bar=k[0], cell=k[1], section=name, chart=ch[k],
+                                 usual=usual[q], like=[s[0] for s in same][:4])
+                            for i, k in enumerate(ks) if ch[k] != usual[q] and k not in verified
+                            and any(ch[x] == usual[q] for x in ks[:i])      # the usual chord
+                            and any(ch[x] == usual[q] for x in ks[i + 1:])]  # on both sides
+                break
+    return sorted(out, key=lambda x: (x['bar'], x['cell']))
+
+
 def weak_lines(a: Path, share: float = 0.5) -> list[dict]:
     """Lines Whisper heard less than `share` of (lyrics_aligned.json 'matched'): their words
     are placed by misheard stand-ins or guesses - ask the player where they fall (a bridge
@@ -94,6 +132,11 @@ def main() -> None:
               f"ask: {' / '.join(q['options'])}?")
     if len(qs) > a.max:
         print(f'... {len(qs) - a.max} more (--max)')
+    for b in pattern_breaks(S):
+        half = 'first' if b['cell'] == 1 else 'second'
+        print(f"pattern break: bar {b['bar']} ({half} half, {b['section']}): chart {b['chart']}, "
+              f"but the section plays {b['usual']} there every other time (bars "
+              f"{', '.join(map(str, b['like']))}) -> ask: {b['chart']} / {b['usual']}?")
     weak = weak_lines(folder / 'analysis')
     for w in weak:
         at = 'bar %d.%d' % tuple(w['where']) if w['where'] else 'unplaced'

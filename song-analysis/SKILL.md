@@ -369,7 +369,9 @@ converts them. Read `references/chart-and-lyrics.md` first. Core invariants:
 **Player check — ask, don't wait.** A "?" in a printed chart waits for someone to notice
 it; a player on their instrument answers in seconds. After rendering, run
 `python3 scripts/chart_questions.py gen_v1.py` (the open cells: chart chord, what
-lv-chordia, the triads and the bass heard, the parallel section's chord) and ask the
+lv-chordia, the triads and the bass heard, the parallel section's chord; also any cell that
+breaks its section's repeating pattern even where the readers agree — on La Luz all four
+of the player's chord fixes were such breaks) and ask the
 player directly, up to four cells per round, the chart's chord first; ask the same way
 about `SUNG, NOT IN THE TEXT` words and the lines it lists as `placement check` (Whisper
 heard under half of them — on Body Heat the bridge, placed one to two beats early, line

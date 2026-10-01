@@ -201,6 +201,21 @@ def syllables(word: str) -> int:
     return max(1, n - (w.endswith('e') and not w.endswith(('le', 'ee')) and n > 1))
 
 
+LATE_PREFIX = ('a', 'be', 'de', 're', 'pre', 'ex', 'in', 'un', 'con', 'com', 'dis', 'for',
+               'to', 'per', 'pro', 'sup')
+LATE_SUFFIX = ('escent', 'ation', 'ition', 'ese', 'ique', 'ee', 'oon', 'ade', 'ette', 'eer')
+
+
+def stress_late(word: str) -> bool:
+    """Guess: a word of 2+ syllables is stressed on its first one (Juniper, other, double)
+    unless an unstressed prefix or a stress-taking suffix moves it (pretending, together,
+    exhausting, another, fluorescent). Only the push depends on it."""
+    w = re.sub(r"[^a-z]", '', word.lower())
+    endings = ('ing', 'ed', 'er', 'es', 'y', 'ly', 'e', 's', 'ings', 'ers')
+    return (w.endswith(LATE_SUFFIX) or any(w.startswith(x) and len(w) > len(x) + 2 and
+                                           w[len(x):] not in endings for x in LATE_PREFIX))
+
+
 def norm(w: str) -> str:
     """As align_lyrics.py: lowercase, no accents or punctuation, final sigma as sigma; ’ as '.
     '' for a token with no letters ('—', '♪')."""
@@ -216,6 +231,9 @@ def mmss(t: float) -> str:
 HOLD = 0.15        # beats: the next word this far past a boundary = the word is held across
 PICKUP_FIRST = 1.25  # beats: a line's first word sung this close before the next cell joins it
 PICKUP = 2.25      # ...and, held across that one, carries on past the next if this close
+HELD_SHARE, HELD_REACH = 0.35, 1.75   # a held one-syllable word: push window 0.35 x its
+                                      # length in beats, at most 1.75 ('dead', held 5 beats)
+STRESS_FIRST = 0.45  # beats: a word stressed on its first syllable is pushed only this close
 SYLLABLE = 0.5     # beats added to the push per syllable past the second (fluorescent: 1.25)
 MISHEARD = 0.2     # letter similarity a misheard word needs to stand in for the line's word
 ANTICIPATE = 0.75   # beats: a word this close before a chord change belongs to the new chord
@@ -368,14 +386,17 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
         if kind == 'adlib' or 'pk' in kind:
             over[key] = (text, kind)
             continue
-        if kind == 'fixed':                      # the player put it here: no timing
-            out.setdefault(key, []).append(text)
-            floor = key
+        if kind == 'fixed':                      # the player put it here: no timing, but
+            out.setdefault(key, []).append(text)  # it claims its heard words, so the next
+            floor = key                           # line doesn't take them
+            if words:
+                fm = match(key, used)
+                used = max([used, *fm.values()])
             continue
         if not words:
             out[key] = [text]
             continue
-        nxt, t_a, _ = span(key)
+        nxt, t_a, t_end = span(key)
         m, nk = match(key, used), next((k for k in sung if k > key), None)
         if m and nk:          # words the next line needs (a repeat Whisper heard once)?
             full = match(nk, used)
@@ -403,7 +424,12 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
         low = max(floor, (first[key[0]], 1)) if sung_at else key
         last = low
         for i, (tok, t) in enumerate(zip(toks, times)):
-            reach = ANTICIPATE + SYLLABLE * max(0, syllables(tok) - 2)   # a long word takes
+            reach = (ANTICIPATE + SYLLABLE * max(0, syllables(tok) - 2)  # a long word takes
+                     if syllables(tok) == 1 or stress_late(tok) else STRESS_FIRST)
+            if syllables(tok) == 1 and i + 1 < len(toks):   # a one-syllable word held long
+                held_for = (times[i + 1] - t) / beat         # inside its line is heard where
+                reach = max(reach, min(HELD_REACH, HELD_SHARE * held_for))   # it settles
+                #                              (a line's last word: the singer stops there)
             pickup = i == 0 and len(toks) > 1  # a line's first word, held into its next one
             c, step = grid.at(t), 0                                 # longer to its stress
             while i in m:                      # heard words only: a guessed time can't push
@@ -411,8 +437,8 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
                 t_e = grid.start(edge) if edge[0] < len(grid.db) else 1e9   # held across it
                 held = i + 1 == len(toks) or times[i + 1] >= t_e + HOLD * beat
                 lim = reach if not pickup else max(reach, PICKUP if step else PICKUP_FIRST)
-                if t_e - t > lim * beat or not held:
-                    break
+                if t_e - t > lim * beat or not held or (step and not pickup):
+                    break                      # only a line's pickup crosses more than one
                 c, step = edge, step + 1
             c = max(c, low)
             while c >= nxt:                              # never spill into the next line

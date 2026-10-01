@@ -1,19 +1,27 @@
-# Remote Script patch: audio loading and warping (for ableton-song-remix)
+# Remote Script patch: audio loading, warping, devices, arrangement (for ableton-song-remix)
 
 The stock AbletonMCP Remote Script can't load an audio file, can't switch Warp on, and its
 `add_warp_marker` calls a method Live doesn't have. `ableton-song-remix` needs all three.
 The patch is `remote-script-remix.patch` beside this file (a diff of
 `AbletonMCP_Remote_Script/__init__.py` against upstream ableton-mcp `main`, MIT-licensed).
 
+- **Sources:** Ableton's Live Object Model docs; the patch-2 calls were cross-checked with
+  LiveBridge's `docs/LIVE_API_VERIFIED.md` (github.com/valentijnh/livebridge-ableton-mcp,
+  MIT), which records what each call does in Live 12.4.5.
 - **Apply:** `git -C <your ableton-mcp clone> apply <this repo>/ableton-mcp/references/remote-script-remix.patch`,
   then **restart Live** (it loads Remote Scripts at start-up).
-- **Check:** the raw-TCP command `get_capabilities` → `{"remix_patch": 1, ...}`.
+- **Check:** the raw-TCP command `get_capabilities` → `{"remix_patch": 2, "commands": [...]}`.
+  Patch 1 (no `insert_device` / arrangement) still builds: effects via the browser, no
+  arrangement, mastering on a `MASTER_BUS` track.
 
 ## Commands after the patch
 
 | Command | Params | Live API | Notes |
 |---|---|---|---|
-| `get_capabilities` | — | none (read-only) | `{"remix_patch": 1, "commands": [...]}`; the stock script answers "Unknown command" |
+| `get_capabilities` | — | none (read-only) | `{"remix_patch": 2, "commands": [...]}`; the stock script answers "Unknown command" |
+| `insert_device` (patch 2) | `track_index` (or `"master"` / -1)`, device_name[, index]` | `Track.insert_device(name, index)` (Live 12.3+) | a built-in device by its exact UI name ("EQ Eight", "Glue Compressor", "Limiter"), no browser; also on the Master track; native devices only (no plug-ins, no Max for Live); raises if the count didn't grow |
+| `duplicate_clip_to_arrangement` (patch 2) | `track_index, clip_index, time` | `Track.duplicate_clip_to_arrangement(clip, time)` | a Session clip onto the timeline at `time` beats; keeps notes, loop and warp markers; returns `start_time`, `end_time`. Clip envelopes may not travel (seen in Live 12.4.5 with an instrument on the track) |
+| `get_arrangement_clips` (patch 2) | `track_index` | `Track.arrangement_clips` | `start_time`, `end_time`, `name` per clip, in time order |
 | `create_audio_clip` | `track_index, clip_index, file_path[, name]` | `ClipSlot.create_audio_clip(path)` (Live 12) | audio track, not frozen, empty slot, an existing absolute path ending .wav/.aif/.aiff/.flac/.mp3/.ogg; returns `sample_rate`, `sample_length`, `warping` |
 | `set_clip_warping` | `track_index, clip_index, warping` | `Clip.warping` | Live defers it: read back with `get_clip_info` before the next warp command |
 | `add_warp_marker` (fixed) | `track_index, clip_index, beat_time[, sample_time]` | `Clip.add_warp_marker(Live.Clip.WarpMarker(beat_time=b, sample_time=s))` | `sample_time` in seconds; omitted → `beat_to_sample_time(b) / sample_rate` (as Ableton's MxDCore does). Raises if Live didn't add it (the sample time must lie between the neighbours'; segments 5–999 BPM) |
@@ -34,7 +42,7 @@ error hidden inside a success reply, as other commands in this script still do (
    AUDIO_FILE_EXTS = (".wav", ".aif", ".aiff", ".flac", ".mp3", ".ogg")
    ```
 2. In the socket-thread `elif` chain (next to `get_all_track_names`):
-   `elif command_type == "get_capabilities": response["result"] = {"remix_patch": 1, ...}`.
+   `elif command_type == "get_capabilities": response["result"] = {"remix_patch": 2, ...}`.
 3. Add `"create_audio_clip", "set_clip_warping", "move_warp_marker"` to the list of
    state-changing commands **and** a branch for each in `main_thread_task` (a command in
    only one of the two answers "Unknown command").

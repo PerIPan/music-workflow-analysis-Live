@@ -13,7 +13,11 @@ MIDI clips (FULL = whole song; section clips = that section, looping), then the 
 file loaded into the FULL slot, warped (vocals Complex Pro, drums Beats), its warp markers
 replaced by one per downbeat so Live's bar N = the song's bar N (read back: every planned
 marker there, none between them), looped to the song length, and copied into each section
-scene looping that section; every stem's markers are read once more at the end. parts.json
+scene looping that section; every stem's markers are read once more at the end. Then the
+arrangement: every section clip copied onto the timeline at its section's start (Live's
+duplicate_clip_to_arrangement, patch 2), so the song plays from bar 1 in Arrangement View.
+Effects go in by name with Track.insert_device (Live 12.3+, patch 2; else the browser);
+--master puts EQ Eight -> Glue Compressor -> Limiter on Live's real Master. parts.json
 must come from this plan (its plan_key), else the build refuses. Needs the patched Remote Script
 (create_audio_clip, set_clip_warping, move_warp_marker, a working add_warp_marker; see
 ableton-mcp/references/remote-script-patch.md): without it, exit 3 before any write.
@@ -22,7 +26,8 @@ A Set that already holds clips is refused (exit 2) unless --force (then tracks a
 are appended). Never run it while Claude is also calling mcp__ableton__* tools.
 
 Usage (python3, standard library only):
-    remix_build.py PLAN [--parts PARTS] [--dry-run] [--force] [--no-instruments]
+    remix_build.py PLAN [--parts PARTS] [--dry-run] [--force] [--no-instruments] [--no-fx]
+        [--no-arrangement] [--master]
 Exit: 0 built, 1 a command failed, 2 Set not empty, 3 Remote Script not patched,
 4 Live not reachable.
 """
@@ -38,6 +43,7 @@ from remix_parts import plan_key  # noqa: E402
 ADDR = ('127.0.0.1', int(os.environ.get('LIVE_PORT', 9877)))      # override for tests
 CHUNK = 300
 POLL_S = float(os.environ.get('REMIX_POLL_S', 1.0))
+PATCH2 = ('insert_device', 'duplicate_clip_to_arrangement', 'get_arrangement_clips')
 WARP_TRIES = 3                  # Live's Auto-Warp can land mid-build: clear and warp again
 SLICE_W = 0.05                  # beats: a note this close before a section start belongs to it
 
@@ -117,7 +123,11 @@ class Sim:
 
     def __call__(self, cmd: str, p: dict) -> dict:
         if cmd == 'get_capabilities':
-            return {'remix_patch': 1}
+            return {'remix_patch': 2, 'commands': list(PATCH2)}
+        if cmd == 'duplicate_clip_to_arrangement':
+            return {'start_time': p['time']}
+        if cmd == 'get_arrangement_clips':
+            return {'clips': [{}] * p.get('_expect', 0)}
         if cmd in ('get_session_info', 'health_check'):
             return {'tempo': self.plan['tempo']['live'], 'track_count': self.tracks,
                     'signature_numerator': self.sig[0], 'signature_denominator': self.sig[1]}
@@ -155,9 +165,11 @@ class Sim:
 
 class Builder:
     def __init__(self, plan: dict, parts: dict, dry: bool, instruments: bool = True,
-                 fx: bool = True, master_bus: bool = False):
+                 fx: bool = True, master_bus: bool = False, arrangement: bool = True):
         self.plan, self.parts, self.dry, self.instruments = plan, parts, dry, instruments
-        self.fx, self.master_bus_on = fx, master_bus
+        self.fx, self.master_bus_on, self.arrangement_on = fx, master_bus, arrangement
+        self.caps: set = set()
+        self.filled: dict = {}                    # track -> section slots holding a clip
         self.sim = Sim(plan) if dry else None
         self.sent: list[tuple[str, dict]] = []
         self.warnings: list[str] = []
@@ -192,6 +204,12 @@ class Builder:
             raise Stop(3, 'the AbletonMCP Remote Script is not patched (no get_capabilities '
                           'remix_patch >= 1): apply ableton-mcp/references/'
                           'remote-script-patch.md, restart Live, re-run')
+        self.caps = set((r.get('result') or {}).get('commands', []))
+        old = [c for c in PATCH2 if c not in self.caps]
+        if old:
+            self.warnings.append(f'Remote Script patch 1 (no {", ".join(old)}): effects via the '
+                                 'browser, no arrangement, mastering on a MASTER_BUS track - '
+                                 're-apply remote-script-patch.md and restart Live for patch 2')
         info = self('get_session_info')
         scenes = self('get_all_scenes').get('scenes', [])
         used = []
@@ -257,10 +275,14 @@ class Builder:
                              f"{self.parts.get('search', {}).get(part)}) - load one by hand")
 
     def master_bus(self, idx: dict) -> None:
-        """Mastering: the MCP can't reach devices on Live's Master track, so every track feeds
-        an audio track MASTER_BUS carrying EQ Eight -> Glue Compressor -> Limiter (Live's
-        defaults: flat EQ, gentle glue, limiter ceiling below 0 dB). Starting points to set
-        by ear, not a finished master."""
+        """Mastering: EQ Eight -> Glue Compressor -> Limiter (Live's defaults: flat EQ, gentle
+        glue, limiter ceiling below 0 dB) on Live's Master track with insert_device (patch 2);
+        with patch 1 every track feeds an audio track MASTER_BUS carrying the chain instead.
+        Starting points to set by ear, not a finished master."""
+        if 'insert_device' in self.caps:
+            self.report['master'] = {'track': 'master',
+                                     'devices': self.fx_chain('master', MASTER_CHAIN, 'Master')}
+            return
         bus = self('create_audio_track', index=-1)['index']
         self('set_track_name', track_index=bus, name=MASTER_BUS)
         for part, t in idx.items():
@@ -276,6 +298,13 @@ class Builder:
         """Load audio effects after whatever the track holds, in order; returns those loaded."""
         loaded = []
         for fx in chain:
+            if 'insert_device' in self.caps:          # Live 12.3+: by name, no browser
+                if ok(self.raw('insert_device', track_index=track, device_name=fx)):
+                    loaded.append(fx)
+                    continue
+            if track == 'master':
+                self.warnings.append(f'{label}: {fx} not inserted - add it by hand')
+                continue
             res = self('search_browser', query=fx, category='audio_effects').get('results', [])
             item = next((x for x in res if x.get('is_loadable') and x.get('uri')
                          and x.get('name', '').lower().startswith(fx.lower())), None)
@@ -325,6 +354,7 @@ class Builder:
                       for n in ns if a - SLICE_W <= n['start_time'] < b - SLICE_W]
                 if sl:
                     self.clip_notes(idx[p], base + 1 + i, b - a, sl, f"{p} · {s['name']}")
+                    self.filled.setdefault(idx[p], []).append(i)
 
     def beat_of(self, sec: float) -> float:
         m = self.plan['warp']['markers']
@@ -460,10 +490,32 @@ class Builder:
                      position=sec['start_beat'])
                 self('set_clip_name', track_index=t, clip_index=slot,
                      name=f"{s['name']} · {sec['name']}")
+                self.filled.setdefault(t, []).append(i)
             self.report['stems'][s['name']] = {'warp_markers': len(want), 'path': s['path']}
         if not self.dry:                          # late Auto-Warp or decoding changes
             for t, (name, want) in self.marks.items():
                 self.check_markers(t, base, want, f'{name}, final check')
+
+    def arrangement(self, base: int) -> None:
+        """Every section clip copied onto the timeline at its section's start beat, so the
+        whole song plays from bar 1 in Arrangement View (the FULL clips stay in Session for
+        A/B); read back per track."""
+        if 'duplicate_clip_to_arrangement' not in self.caps:
+            return
+        secs = self.plan['sections']
+        for t, done in self.filled.items():
+            for i in done:
+                got = self('duplicate_clip_to_arrangement', track_index=t, clip_index=base + 1 + i,
+                           time=secs[i]['start_beat'])
+                if abs(float(got.get('start_time', -1)) - secs[i]['start_beat']) > 1e-3:
+                    raise Failed('duplicate_clip_to_arrangement', {'track_index': t,
+                                                                   'section': i}, got)
+            n = len(self('get_arrangement_clips', track_index=t, _expect=len(done))
+                    .get('clips', []))
+            if n != len(done):
+                self.warnings.append(f'track {t}: {n} arrangement clips, {len(done)} expected')
+        self.report['arrangement'] = {'tracks': len(self.filled),
+                                      'clips': sum(map(len, self.filled.values()))}
 
     def run(self, force: bool) -> None:
         self.force = force
@@ -480,6 +532,8 @@ class Builder:
             self.track_fx(idx)
         if self.master_bus_on:
             self.master_bus(idx)
+        if self.arrangement_on:
+            self.arrangement(base)
         self.report['scenes'] = {'full': base, 'sections': base + 1}
 
 
@@ -491,9 +545,11 @@ def main() -> None:
     ap.add_argument('--force', action='store_true', help='append to a Set that has clips')
     ap.add_argument('--no-instruments', action='store_true')
     ap.add_argument('--no-fx', action='store_true', help='no effects on the tracks')
-    ap.add_argument('--master-bus', action='store_true',
-                    help='also route everything into a MASTER_BUS track with EQ Eight, Glue '
-                         'Compressor and Limiter (off by default)')
+    ap.add_argument('--master', '--master-bus', dest='master_bus', action='store_true',
+                    help="EQ Eight, Glue Compressor and Limiter on Live's Master (off by "
+                         'default; with patch 1 on a MASTER_BUS track instead)')
+    ap.add_argument('--no-arrangement', action='store_true',
+                    help='leave the Arrangement empty (Session clips only)')
     a = ap.parse_args()
     plan_p = Path(a.plan)
     plan = json.loads(plan_p.read_text())
@@ -507,7 +563,8 @@ def main() -> None:
     missing = [s['path'] for s in plan['stems'] if not Path(s['path']).is_file()]
     if missing:
         sys.exit(f'remix_build: stem files missing: {missing}')
-    b = Builder(plan, parts, a.dry_run, not a.no_instruments, not a.no_fx, a.master_bus)
+    b = Builder(plan, parts, a.dry_run, not a.no_instruments, not a.no_fx, a.master_bus,
+                not a.no_arrangement)
     try:
         b.run(a.force)
     except Stop as e:

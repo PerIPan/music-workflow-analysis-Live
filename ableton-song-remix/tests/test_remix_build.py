@@ -26,17 +26,19 @@ from fixtures import make_song  # noqa: E402
 
 TMP = Path(tempfile.mkdtemp(prefix='remix_build_'))
 atexit.register(shutil.rmtree, TMP, True)
-WRITES = ('set_', 'create_', 'add_', 'delete_', 'move_', 'load_', 'duplicate_')
+WRITES = ('set_', 'create_', 'add_', 'delete_', 'move_', 'load_', 'duplicate_', 'insert_')
 
 
 class MockLive:
     """Enough of the patched Remote Script: tracks, scenes, clips, notes, warp markers."""
 
     def __init__(self, patched=True, swallow=(), fail_on=None, clips_on_track=False,
-                 first_at=0.0, inject=False, decode_reads=0, clamp=False, autowarp=False):
+                 first_at=0.0, inject=False, decode_reads=0, clamp=False, autowarp=False,
+                 patch=2):
         self.patched, self.swallow, self.fail_on = patched, set(swallow), fail_on
         self.first_at, self.inject, self.clamp = first_at, inject, clamp
         self.autowarp = autowarp                  # Auto-Warp lands after the first add
+        self.patch, self.master = patch, []       # patch 2: insert_device, arrangement
         self.decode_reads = decode_reads          # get_clip_info reads with sample_length 0
         self.calls, self.tempo, self.sig = [], 120.0, (4, 4)
         self.scenes = [''] * 8
@@ -83,7 +85,26 @@ class MockLive:
         if t == 'get_capabilities':
             if not self.patched:
                 raise ValueError(f'Unknown command: {t}')
-            return {'remix_patch': 1}
+            if self.patch < 2:
+                return {'remix_patch': 1}
+            return {'remix_patch': 2, 'commands': ['get_capabilities', 'insert_device',
+                    'duplicate_clip_to_arrangement', 'get_arrangement_clips']}
+        if t in ('insert_device', 'duplicate_clip_to_arrangement', 'get_arrangement_clips') \
+                and self.patch < 2:
+            raise ValueError(f'Unknown command: {t}')
+        if t == 'insert_device':
+            devs = self.master if p['track_index'] == 'master' else \
+                self.tracks[p['track_index']]['devices']
+            devs.append({'name': p['device_name'], 'native': True})
+            return {'name': p['device_name'], 'index': len(devs) - 1}
+        if t == 'duplicate_clip_to_arrangement':
+            tr = self.tracks[p['track_index']]
+            c = tr['slots'][p['clip_index']]
+            tr.setdefault('arr', []).append((p['time'], c.get('name')))
+            return {'start_time': p['time'], 'name': c.get('name')}
+        if t == 'get_arrangement_clips':
+            return {'clips': [{'start_time': s, 'name': n}
+                              for s, n in sorted(self.tracks[p['track_index']].get('arr', []))]}
         if t == 'get_session_info':
             return {'tempo': self.tempo, 'track_count': len(self.tracks),
                     'signature_numerator': self.sig[0], 'signature_denominator': self.sig[1]}
@@ -295,14 +316,39 @@ def main():
     check('tracks: stem, muted mix, new parts', names == [
         'VOX · orig', 'MIX · orig (A/B)', 'DRUMS · new (as-analysed)',
         'BASS · new (as-analysed)', 'KEYS · new (as-analysed)'] and m.tracks[1]['mute'], names)
-    fx = {t['name']: [d['name'].split(':', 1)[1] for d in t['devices'] if d['name'].startswith('uri:')]
-          for t in m.tracks}
+    fx = {t['name']: [d['name'] for d in t['devices'] if d.get('native')] for t in m.tracks}
     check('devices on every track by role; the A/B mix stays clean',
           fx['VOX · orig'] == ['EQ Eight', 'Compressor'] and fx['MIX · orig (A/B)'] == []
           and fx['DRUMS · new (as-analysed)'][-2:] == ['Drum Buss', 'EQ Eight']
           and fx['BASS · new (as-analysed)'][-2:] == ['EQ Eight', 'Compressor'], fx)
-    check('no mastering bus unless asked (--master-bus)',
-          'MASTER_BUS' not in fx and not any(t.get('out') for t in m.tracks), list(fx))
+    check('no mastering unless asked (--master)',
+          'MASTER_BUS' not in fx and not m.master and not any(t.get('out') for t in m.tracks),
+          list(fx))
+    secs = plan['sections']
+    arr = {x['name']: x.get('arr', []) for x in m.tracks}
+    check('arrangement: every section clip at its section start, named by section',
+          [s for s, _ in arr['VOX · orig']] == [s['start_beat'] for s in secs] and
+          [n for _, n in arr['VOX · orig']] == [f"vocals · {s['name']}" for s in secs] and
+          all(arr[n] for n in arr), {k: v[:2] for k, v in arr.items()})
+    check('arrangement copies come after every Session clip is in',
+          max(i for i, c in enumerate(types) if c == 'create_clip') <
+          types.index('duplicate_clip_to_arrangement'))
+    m = MockLive()
+    r = run('remix_build.py', plan_p, '--master', '--no-arrangement', port=m.port)
+    check("--master: EQ Eight, Glue Compressor, Limiter on Live's Master, no bus track",
+          r.returncode == 0 and [d['name'] for d in m.master] ==
+          ['EQ Eight', 'Glue Compressor', 'Limiter'] and
+          'MASTER_BUS' not in [x['name'] for x in m.tracks], (m.master, r.stdout[-300:]))
+    check('--no-arrangement: nothing copied to the timeline',
+          not any(c['type'] == 'duplicate_clip_to_arrangement' for c in m.calls))
+    m = MockLive(patch=1)
+    r = run('remix_build.py', plan_p, '--master', port=m.port)
+    uri = [d['name'] for d in m.tracks[0]['devices']] if m.tracks else []
+    check('patch 1 Live: browser effects, MASTER_BUS track, no arrangement, a warning',
+          r.returncode == 0 and uri == ['uri:EQ Eight', 'uri:Compressor'] and
+          'MASTER_BUS' in [x['name'] for x in m.tracks] and 'patch 1' in r.stdout and
+          not any(c['type'] == 'duplicate_clip_to_arrangement' for c in m.calls),
+          (uri, r.stdout[-300:]))
     check('FULL + one scene per section, named',
           m.scenes[0].startswith('FULL') and m.scenes[1] == 'Intro · bars 1-2'
           and m.scenes[2] == 'Verse · bars 3-8', m.scenes[:3])

@@ -62,8 +62,10 @@ Say the plan back in one line before building.
 
 Every track gets a starting effects chain by role (vocal/bass/keys: EQ Eight → Compressor;
 drums: Drum Buss → EQ Eight; the muted A/B mix stays clean) at Live's defaults — set by ear.
-`--no-fx` skips it; `--master-bus` also routes everything into a `MASTER_BUS` track with EQ
-Eight → Glue Compressor → Limiter (the MCP can't load devices on Live's Master track).
+`--no-fx` skips it; `--master` puts EQ Eight → Glue Compressor → Limiter on Live's Master
+track (opt-in). The build also lays every section clip onto the Arrangement at its section's
+start, so the song plays from bar 1 there (`--no-arrangement`: Session only). Both need
+patch 2 and Live 12.3+; with patch 1 the build warns, uses the browser and a `MASTER_BUS` track.
 
 All scripts run with `python3` and the standard library. `NEEDS A DECISION` (exit 2 from
 the plan) is a question for the user: ask, then re-run with the answer (`--tempo <BPM>` /
@@ -96,8 +98,8 @@ build refuses parts made for another plan.
 
 ## Limits
 
-- **No save, export or Arrangement stamping.** The user saves (Collect All and Save),
-  adds the Master limiter, and records the scenes or drags FULL clips to the Arrangement.
+- **No save or export.** The user saves (Collect All and Save) and exports. Clip
+  envelopes may not survive the copy to the Arrangement (none are written by the build).
 - **One meter per Set.** The grouping lives in the patterns; irregular single bars aren't
   in the analysis grid, so the remix doesn't have them either.
 - **Section scenes start on the section's first bar**, so a vocal pickup sung in the bar

@@ -1,5 +1,5 @@
 diff --git a/AbletonMCP_Remote_Script/__init__.py b/AbletonMCP_Remote_Script/__init__.py
-index 3354d56..1c66f75 100644
+index 3354d56..8cbc42f 100644
 --- a/AbletonMCP_Remote_Script/__init__.py
 +++ b/AbletonMCP_Remote_Script/__init__.py
 @@ -1,5 +1,6 @@
@@ -9,7 +9,7 @@ index 3354d56..1c66f75 100644
  import socket
  import json
  import threading
-@@ -15,6 +16,12 @@ CLIENT_TIMEOUT = float(os.environ.get("ABLETON_MCP_CLIENT_TIMEOUT", "300.0"))  #
+@@ -15,6 +16,14 @@ CLIENT_TIMEOUT = float(os.environ.get("ABLETON_MCP_CLIENT_TIMEOUT", "300.0"))  #
  MAX_CLIENTS = int(os.environ.get("ABLETON_MCP_MAX_CLIENTS", "10"))
  MAX_BUFFER_SIZE = int(os.environ.get("ABLETON_MCP_MAX_BUFFER", "1048576"))  # 1MB
  
@@ -17,30 +17,34 @@ index 3354d56..1c66f75 100644
 +WARP_MODE_NAMES = ["beats", "tones", "texture", "repitch", "complex", "rex", "complex_pro"]
 +AUDIO_FILE_EXTS = (".wav", ".aif", ".aiff", ".flac", ".mp3", ".ogg")
 +REMIX_PATCH_COMMANDS = ["get_capabilities", "create_audio_clip", "set_clip_warping",
-+                        "add_warp_marker", "move_warp_marker", "set_clip_warp_mode"]
++                        "add_warp_marker", "move_warp_marker", "set_clip_warp_mode",
++                        "insert_device", "duplicate_clip_to_arrangement",
++                        "get_arrangement_clips"]
 +
  def create_instance(c_instance):
      """Create and return the AbletonMCP script instance"""
      return AbletonMCP(c_instance)
-@@ -554,6 +561,8 @@ class AbletonMCP(ControlSurface):
+@@ -554,6 +563,8 @@ class AbletonMCP(ControlSurface):
              # Quick track names
              elif command_type == "get_all_track_names":
                  response["result"] = self._get_all_track_names()
 +            elif command_type == "get_capabilities":
-+                response["result"] = {"remix_patch": 1, "commands": REMIX_PATCH_COMMANDS}
++                response["result"] = {"remix_patch": 2, "commands": REMIX_PATCH_COMMANDS}
              # Music theory queries (no modification needed)
              elif command_type == "get_scale_notes":
                  root = params.get("root", 0)
-@@ -586,6 +595,8 @@ class AbletonMCP(ControlSurface):
+@@ -586,6 +597,10 @@ class AbletonMCP(ControlSurface):
                                   "set_clip_gain", "set_clip_pitch", "set_clip_warp_mode", "get_clip_warp_info",
                                   # Warp markers
                                   "add_warp_marker", "delete_warp_marker",
 +                                 # Remix patch: audio file loading and warping
 +                                 "create_audio_clip", "set_clip_warping", "move_warp_marker",
++                                 # Remix patch 2: native devices, arrangement
++                                 "insert_device", "duplicate_clip_to_arrangement", "get_arrangement_clips",
                                   # Clip automation
                                   "get_clip_automation", "set_clip_automation", "clear_clip_automation",
                                   # Group tracks
-@@ -959,6 +970,20 @@ class AbletonMCP(ControlSurface):
+@@ -959,6 +974,30 @@ class AbletonMCP(ControlSurface):
                              clip_index = params.get("clip_index", 0)
                              beat_time = params.get("beat_time", 0.0)
                              result = self._delete_warp_marker(track_index, clip_index, beat_time)
@@ -58,10 +62,20 @@ index 3354d56..1c66f75 100644
 +                                                            params.get("clip_index", 0),
 +                                                            params.get("beat_time", 0.0),
 +                                                            params.get("distance", 0.0))
++                        elif command_type == "insert_device":
++                            result = self._insert_device(params.get("track_index", 0),
++                                                         params.get("device_name", ""),
++                                                         params.get("index", -1))
++                        elif command_type == "duplicate_clip_to_arrangement":
++                            result = self._duplicate_clip_to_arrangement(
++                                params.get("track_index", 0), params.get("clip_index", 0),
++                                params.get("time", 0.0))
++                        elif command_type == "get_arrangement_clips":
++                            result = self._get_arrangement_clips(params.get("track_index", 0))
  
                          # ============================================
                          # Clip Automation
-@@ -2090,6 +2115,9 @@ class AbletonMCP(ControlSurface):
+@@ -2090,6 +2129,9 @@ class AbletonMCP(ControlSurface):
              if clip.is_audio_clip:
                  result["warping"] = clip.warping
                  result["warp_mode"] = clip.warp_mode if hasattr(clip, 'warp_mode') else None
@@ -71,7 +85,7 @@ index 3354d56..1c66f75 100644
  
              return result
          except Exception as e:
-@@ -4022,17 +4050,22 @@ class AbletonMCP(ControlSurface):
+@@ -4022,17 +4064,22 @@ class AbletonMCP(ControlSurface):
              if not clip.is_audio_clip:
                  raise ValueError("Clip is not an audio clip")
  
@@ -105,7 +119,7 @@ index 3354d56..1c66f75 100644
              clip.warp_mode = mode_value
  
              return {
-@@ -4057,7 +4090,7 @@ class AbletonMCP(ControlSurface):
+@@ -4057,7 +4104,7 @@ class AbletonMCP(ControlSurface):
              if not clip.is_audio_clip:
                  raise ValueError("Clip is not an audio clip")
  
@@ -114,7 +128,7 @@ index 3354d56..1c66f75 100644
  
              return {
                  "track_index": track_index,
-@@ -5178,36 +5211,86 @@ class AbletonMCP(ControlSurface):
+@@ -5178,36 +5225,135 @@ class AbletonMCP(ControlSurface):
              self.log_message("Error getting warp markers: " + str(e))
              return {"error": str(e)}
  
@@ -191,6 +205,55 @@ index 3354d56..1c66f75 100644
 +        if not any(abs(m.beat_time - target) < 1e-3 for m in clip.warp_markers):
 +            raise RuntimeError("Live did not move the warp marker to beat {0}".format(target))
 +        return {"beat_time": target}
++
++    def _track_or_master(self, track_index):
++        """song.tracks[i], or the Master track for "master" / -1"""
++        if track_index in ("master", -1):
++            return self._song.master_track
++        tracks = list(self._song.tracks)
++        if not 0 <= int(track_index) < len(tracks):
++            raise IndexError("Track index out of range")
++        return tracks[int(track_index)]
++
++    def _insert_device(self, track_index, device_name, index=-1):
++        """Insert a built-in Live device by its UI name ("EQ Eight", "Limiter", ...) on a track
++        or the Master (Track.insert_device, Live 12.3+; native devices only, no browser)"""
++        track = self._track_or_master(track_index)
++        if not hasattr(track, "insert_device"):
++            raise RuntimeError("Track.insert_device needs Live 12.3+")
++        before = len(list(track.devices))
++        track.insert_device(str(device_name), int(index))
++        devices = list(track.devices)
++        if len(devices) != before + 1:
++            raise RuntimeError("Live did not insert {0}".format(device_name))
++        pos = len(devices) - 1 if int(index) < 0 else int(index)
++        return {"name": devices[pos].name, "index": pos, "count": len(devices)}
++
++    def _duplicate_clip_to_arrangement(self, track_index, clip_index, time):
++        """Copy a Session clip onto the arrangement timeline at a beat
++        (Track.duplicate_clip_to_arrangement; keeps notes, loop and warp markers)"""
++        clip_slot = self._validate_clip_slot(track_index, clip_index)
++        if not clip_slot.has_clip:
++            raise ValueError("No clip in slot")
++        track = self._song.tracks[track_index]
++        if not hasattr(track, "duplicate_clip_to_arrangement"):
++            raise RuntimeError("Track.duplicate_clip_to_arrangement is not in this Live version")
++        time = float(time)
++        if not 0 <= time <= 1576800:
++            raise ValueError("time out of range: {0}".format(time))
++        track.duplicate_clip_to_arrangement(clip_slot.clip, time)
++        hit = [c for c in track.arrangement_clips if abs(c.start_time - time) < 1e-3]
++        if not hit:
++            raise RuntimeError("Live did not place the clip at beat {0}".format(time))
++        c = hit[-1]
++        return {"start_time": c.start_time, "end_time": c.end_time, "name": c.name}
++
++    def _get_arrangement_clips(self, track_index):
++        """The arrangement clips of a track, in time order"""
++        track = self._track_or_master(track_index)
++        return {"clips": [{"start_time": c.start_time, "end_time": c.end_time, "name": c.name,
++                           "is_audio_clip": c.is_audio_clip}
++                          for c in getattr(track, "arrangement_clips", [])]}
 +
 +    def _set_clip_warping(self, track_index, clip_index, warping):
 +        """Switch Warp on/off. Live defers this: read it back with get_clip_info."""

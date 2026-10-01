@@ -36,6 +36,8 @@ with no `result.error`.
 | scenes | row 0 = FULL, row s = section s; missing rows `create_scene`; `set_scene_name` (`Verse 1 · bars 5-20`) |
 | MIDI | FULL: `create_clip` (whole song) + `add_notes_to_clip` × 300-note chunks + `set_clip_name`; each section: its notes shifted to 0 in a section-long clip (looping by default; humanize never moves a section downbeat, and a note up to 0.05 beat early still opens its section); no notes → no clip, so launching the scene stops that track |
 | stems | `create_audio_clip` into the FULL slot (a timeout is polled with `get_clip_info`); `set_clip_warping` (a separate command: Live defers it; read back); `set_clip_warp_mode` (vocals/other/bass/mix `complex_pro`, drums `beats`); the markers (below); `set_clip_loop` 0 → song length; `set_clip_start_marker` 0 (`get_clip_info` read-back: `loop_end`, `loop_start`, `start_marker`; a mismatch is a warning); then per section `duplicate_clip` (lands in the next empty slot below = that section's row) + `set_clip_loop` + `set_clip_start_marker` to the section |
+| effects | per track by role: `insert_device` by name (patch 2), else `search_browser` + `load_browser_item`; `--master`: the chain on the Master (`track_index: "master"`) |
+| arrangement | per track, every section clip: `duplicate_clip_to_arrangement` at the section's `start_beat` (reply `start_time` checked), then `get_arrangement_clips` (count read back; a mismatch is a warning) |
 
 **Warp markers** (per stem): wait until Live has finished with the file (`get_clip_info`
 `sample_length` above 0 and two `get_warp_markers` reads alike) → `delete_warp_marker`
@@ -53,7 +55,9 @@ hidden end). Once all stems are in, every stem's markers are read once more.
   warnings (a FULL loop end, loop start or start marker that Live clamped, an instrument
   not found).
 - Launch FULL: every track plays the whole song in sync. Section scenes loop their section.
-- Recording to the Arrangement, saving, the Master limiter and export are the user's.
+- The Arrangement holds every section clip at its section's start (play from bar 1); the
+  Session keeps FULL and the section scenes for A/B. If the Arrangement won't play, press
+  Back to Arrangement (a launched scene takes over). Saving and export are the user's.
 
 ## Failure modes
 

@@ -64,6 +64,18 @@ def main():
     check("section labels + start times", [(s["label"], s["t"]) for s in S] ==
           [("S1", 10.0), ("Chorus", 20.0), ("S3", 40.0)], [(s["label"], s["t"]) for s in S])
     check("sections carry (bar, cell)", S[1]["where"] == [7, 1], S[1]["where"])
+    # a word the singer sings that the lyrics page left out
+    sys.path.insert(0, str(SCRIPT.parent))
+    from align_lyrics import align, parse_lyrics, sung_not_in_text
+    lines, _ = parse_lyrics("Coming back for you\nWild world\n")
+    ref = [(li, w) for li, l in enumerate(lines) for w in l["words"]]
+    hyp = [dict(word=w, start=t) for w, t in (("I'm", 1.0), ("coming", 1.3), ("back", 1.6),
+                                              ("for", 1.9), ("you", 2.1), ("wild", 6.0),
+                                              ("world", 6.4))]
+    pairs = align([w for _, w in ref], [h["word"].lower().strip("'") for h in hyp])
+    extra = sung_not_in_text(lines, ref, pairs, hyp)
+    check("SUNG, NOT IN THE TEXT: Whisper's 'I'm' just before 'Coming back for you', "
+          "nothing before a line that starts as written", extra == {0: ["I'm"]}, extra)
     sys.exit(1 if fails else 0)
 
 

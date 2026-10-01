@@ -52,9 +52,9 @@ with 5+ letters either side, so a hyphen never looks like a syllable split.
 Vocalists anticipate beats — pickup syllables come early, resolutions land late. Raw
 Whisper word-onset timing produces awkward, visually misleading placements.
 
-You choose each line's anchor (Rule 1) and the pickups (Rule 4) in the data file;
+You choose each line's anchor and the pickups (Rule 4) in the data file;
 `chart_html.py` does the rest: it splits each line over the cells where Whisper heard its
-words, keeps them in sung order, pulls early syllables into the anchor and never lets a
+words (Rule 1), keeps them in sung order, and never lets a
 line reach the next line's anchor or leave its section (Rules 3 and 5); a pickup or an
 ad-lib shares its cell with the line's words. A line looks up to 2.5 s back for early
 syllables, but never at words an earlier sung line matched, so a repeated line (the same
@@ -65,43 +65,43 @@ its words.
 Words Whisper missed are interpolated between heard ones, and set a beat apart after the
 last heard word.
 
-### Rule 1 (the big one): Anchor at the chord that resolves the phrase
+### Rule 1 (the big one): every word where it is sung — the player's ears decide
 
-**Each lyric phrase visually lives in the cell of the chord it resolves INTO**, not where
-the pickup syllable was sung. Pickup syllables are absorbed. Bands read cell-to-chord — a
-pickup syllable visually attached to the wrong chord causes them to play that chord with
-the wrong feel.
+**Default (`placement: 'sung'`): each word sits in the cell where it is sung**, from
+Whisper's word times — a player checking the Body Heat chart on bass (2026-10-01) asked
+for exactly that, cell by cell: "you have the milliseconds, right?". A line's opening
+words may start before its anchor (back to the previous line's last cell or the section
+start): "And this" sung on beat 2.75 of the Cmaj7 bar sits on its second half, "double"
+on the next bar's Em. The anchor only orders the lines.
+
+**The push: a heard word sung within a dotted eighth (¾ beat, `ANTICIPATE`) before the
+next half-bar and held across it sits in the next cell.** Held = the line's next word
+starts after the boundary, or none follows. Whisper times a word's first consonant and
+singers push into the beat, so "…once more" on beat 4.4 is heard on the next bar's chord,
+and "night" on beat 2.35 on the second half. A quick pickup into a word that is itself
+pushed stays ("so I | stepped outside"); a guessed (unheard) word never pushes. Scored
+against the player's 15 corrections: 14/15 (the miss sits in a stop bar). Lyric pages can
+also drop sung words ("Coming back…" sung "I'm coming back…"): `align_lyrics.py` prints
+`SUNG, NOT IN THE TEXT` for Whisper words just before a line that no lyric word took —
+check by ear and add them to lyrics.txt.
+
+**Older alternative (`placement: 'anchor'`)**: each phrase lives in the cell of the chord
+it resolves INTO and pickup syllables are absorbed — a band reads cell-to-chord. A player
+asked for it once (2026-05); the Body Heat player wanted the sung position. Ask which the
+band reads; default to sung.
 
 ```
 Sung:    [A♭ bar...] "Pickup words here,"|[E♭ bar] "and the phrase"  [A♭ bar] "ends"
-Chart:   [A♭]                              |[E♭]    "Pickup words here, / and the phrase"  [A♭] "ends"
-                                            ^ phrase anchored at the E♭ change
+sung:    [A♭] "Pickup words here,"        |[E♭] "and the phrase"     [A♭] "ends"
+anchor:  [A♭]                              |[E♭] "Pickup words here, / and the phrase"  [A♭] "ends"
 ```
 
-**Don't anchor a line at its section's first bar by default.** A chorus that starts on a
-pickup ("And this…", "All this…") sung over the loop's first chord lands on the next
-one: anchor it there and the pickup words follow (a player moved two such lines from
-the Cmaj7 to the Em). Check each line's first stressed word against the chord change.
-
-**Inside a line, the same holds word by word: a word sung within a dotted eighth before a
-chord change belongs to the new chord.** Singers push into the change, and Whisper times
-the word's first consonant, so a word that "starts on the E minor" for the player sits a
-16th or an eighth early on the clock. The renderer moves it (`ANTICIPATE`, ¾ beat) — only
-across a chord change; between two cells of one chord words stay where sung. Found on a
-4/4 loop where the player heard line endings on the next chord: words on beat 4.8 and
-4.4 ("…once more" belongs to the next bar's chord).
-
 **Stops.** Where the band drops out under the voice (a stop-time break), the chords stay
-but the whole bar is greyed, so the band knows to stop rather than play the loop through
-(a player wanted the line's start greyed too: the band hits or rings on beat 1, then
-stops). `stem_activity.py` measures each cell as the median of 50 ms frames
-(`band_level.json`, the stems without vocals vs the median cell), so a hit or a ringing
-chord doesn't count as playing; under 0.15 is a stop. On the first song the stops read
-0.01–0.02, a quiet verse's played cells 0.3 and up (0.3 as the line caught one).
-
-Apply per line: identify the chord the line *resolves on* (usually a chord change near the
-phrase end) and anchor the line at that chord's cell; the renderer pulls earlier-sung
-words into it.
+(they follow the loop) but the whole bar is greyed, so the band knows to stop rather than
+play through, and it gets no "?" (nothing to read). `stem_activity.py` measures each cell
+as the median of 50 ms frames (`band_level.json`, the stems without vocals vs the median
+cell), so a hit or a ringing chord doesn't count as playing; under 0.15 is a stop. On the
+first song the stops read 0.01–0.02, a quiet verse's played cells 0.3 and up.
 
 ### Rule 2: Empty cells = sustain or rest
 
@@ -146,8 +146,9 @@ Patterns that recur across songs:
   bass enters, where lv-chordia says `Am` and the bass holds F, is usually one chord:
   Am over F = `Fmaj7` (Dm over B♭ = `B♭maj7`). Name the combined chord before calling
   either reader wrong.
-- **"Anchor at the chord, not the syllable."** Pickups are visual artifacts; the chart's
-  job is to show *where to play the chord change*. Rule 1.
+- **"Anchor at the chord, not the syllable."** That was the old default; a player who
+  checked a chart cell by cell wanted every word where it is sung, with the push (Rule 1).
+  Ask which the band reads; `placement: 'anchor'` keeps the old way.
 - **"Chord and lyric must live on the same row."** Row breaks fall every `bars_per_row`
   bars from the section start; if a phrase straddles one, change `bars_per_row` or start a
   section there. If the chorus's opening line lives on the chorus row, the chorus's E♭→F
@@ -245,7 +246,9 @@ SONG = dict(
   prints E (G♯), `'N.C.'` a rest). Never `chords_lv.json`'s Harte labels (`'A:min7'`,
   `'E:maj/3'`, `'N'`): they are refused.
 - `lyrics`: seed from `analysis/lyrics_aligned.json` (each line's `text` at its `where`),
-  then move each anchor per Rule 1 and mark the pickups (`'pk pk-<next section's kind>'`)
+  keep each anchor near the line's first sung word (only the order matters with the
+  default `placement: 'sung'`), add words `align_lyrics.py` printed as `SUNG, NOT IN THE
+  TEXT` once heard, and mark the pickups (`'pk pk-<next section's kind>'`)
   and ad-libs (`'adlib'`: whole in its cell, greyed).
 - `words`: the transcription `align_lyrics.py` kept — `lyrics_aligned.json`'s `source`
   without `analysis/`.

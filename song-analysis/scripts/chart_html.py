@@ -69,6 +69,8 @@ kind or a Harte chord label is refused with the reason.
                     [{"word", "start"}, ...]}); without it, or with no words in it, every
                     line stays whole at its anchor
     bass_notes      {(bar, cell): 'A'}: bass note printed as (A) on a label with no slash
+    placement       'sung' (default): each word in the cell where it is sung, pushes kept;
+                    'anchor': words sung before a line's anchor are pulled into it
     verified        [(bar, cell), ...] a player confirmed (JSON-style [bar, cell] lists do
                     too): no "?" or split mark there (say who checked in provenance)
     grouping        overrides foundation.json's; must match the grid the analysis used
@@ -273,18 +275,23 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
     sung line needs when they start nearer that line's anchor than its own (Whisper heard a
     repeat once): it then counts as unheard, a beat per word. Words sung before the line's
     anchor cell are pulled into it (the chord the phrase resolves into), and nothing spills
-    past the next line's anchor or out of the line's section. A word starting within a
-    dotted eighth (ANTICIPATE beats) of a chord change and held across it (the line's next
-    word comes after the change, or none does) is sung into the new chord - the push a
-    player hears, not the consonant Whisper times. A quick pickup into a word that is
-    itself pushed ("so I | stepped") stays; between two cells of one chord nothing moves.
-    With no words, every line stays whole."""
+    past the next line's anchor or out of the line's section. Placement 'sung' (the
+    default) puts every word in the cell where it is sung - a line's opening words may sit
+    before its anchor, back to the previous line's last cell or the section start; 'anchor'
+    pulls words sung before the anchor into it (the chord the phrase resolves into). A
+    heard word starting within a dotted eighth (ANTICIPATE beats) of the next cell and held
+    across it (the line's next word comes after, or none does) is in the next cell - the
+    push a player hears, not the consonant Whisper times; a quick pickup into a word that
+    is itself pushed ("so I | stepped") stays. With no words, every line stays whole."""
     entries = sorted(S.get('lyrics', {}).items())
     out, over = {}, {}
     stem = lambda w: norm(w)[:4]
     wt = sorted(((s, w['start']) for w in words or () for s in [stem(w['word'])] if s),
                 key=lambda x: x[1])
     end = {b: b1 for _, b0, b1, *_ in S['sections'] for b in range(b0, b1 + 1)}
+    first = {b: b0 for _, b0, b1, *_ in S['sections'] for b in range(b0, b1 + 1)}
+    sung_at = S.get('placement', 'sung') == 'sung'   # words where sung, not pulled to anchors
+    floor = (0, 0)                                   # the previous line's last cell
     sung = [k for k, (_, kind) in entries if kind != 'adlib' and 'pk' not in kind]
     lines = dict(entries)
 
@@ -340,18 +347,20 @@ def distribute(S: dict, grid: Grid, words: list | None) -> tuple[dict, dict]:
                 times[i] = times[lo] + beat * (i - lo)
             else:                                # nothing heard: a beat per word
                 times[i] = t_a + beat * i
-        last = key
+        low = max(floor, (first[key[0]], 1)) if sung_at else key
+        last = low
         for i, (tok, t) in enumerate(zip(toks, times)):
             c, push = grid.at(t), grid.at(t + ANTICIPATE * beat)
             held = i + 1 == len(toks) or times[i + 1] >= grid.start(push) - 0.05 * beat
-            if push != c and S['chords'].get(push) != S['chords'].get(c) and held:
-                c = push                       # held across the change: on the new chord
-            c = max(c, key)
+            if push != c and held and i in m:  # heard words only: a guessed time can't push
+                c = push                       # held across the boundary: in the next cell
+            c = max(c, low)
             while c >= nxt:                              # never spill into the next line
                 c = grid.prev(c)
             c = max(c, last)                             # words stay in sung order
             out.setdefault(c, []).append(tok)
             last = c
+        floor = last
     return {c: ' '.join(toks) for c, toks in out.items()}, over
 
 
@@ -547,7 +556,7 @@ SPLIT_CSS = ('.half.split .chord{text-decoration:underline dashed #b58632;'
              'text-decoration-thickness:2px;text-underline-offset:.14em}')
 ADLIB_CSS = '.lyric .adlib{color:#aaa;margin-left:.45em}'
 KEYS = {'title', 'artist', 'sections', 'chords', 'folder', 'out', 'key_short', 'lyrics',
-        'words', 'bass_notes', 'verified', 'grouping', 'bars_per_row', 'duration_s', 'subline',
+        'words', 'bass_notes', 'verified', 'placement', 'grouping', 'bars_per_row', 'duration_s', 'subline',
         'facts', 'provenance', 'map_note', 'notes', 'method'}
 KINDS = ('intro', 'verse', 'post', 'chorus', 'bridge', 'inst', 'outro')
 LYRIC_KINDS = ('', 'adlib', *(f'pk pk-{k}' for k in KINDS))
@@ -616,6 +625,8 @@ def check_song(S: dict) -> None:
            if not (isinstance(n, str) and re.fullmatch(r'[A-G][#b]?', n))]
     if bad:
         raise ValueError(f"bass_notes take a note name ('A', 'F#', 'Bb'): {bad[:4]}")
+    if S.get('placement', 'sung') not in ('sung', 'anchor'):
+        raise ValueError("'placement' must be 'sung' or 'anchor'")
     v = S.get('verified', [])
     if not (isinstance(v, (list, tuple, set, frozenset)) and all(
             isinstance(k, (list, tuple)) and len(k) == 2 and all(whole(x) for x in k)
@@ -735,7 +746,8 @@ def render(S: dict, out: str | Path | None = None) -> Path:
             words = None
 
     verified = {tuple(k) for k in S.get('verified', ())}
-    flagged, split = flags(S, lv, tri, bass) - verified, splits(S, lv) - verified
+    quiet = verified | stops            # a stop bar: nothing to read, the chart keeps the loop
+    flagged, split = flags(S, lv, tri, bass) - quiet, splits(S, lv) - quiet
     lyr, over = distribute(S, grid, words)
     st = stats(S, lv, tri)
     per_row = S.get('bars_per_row') or max(1, 8 // grid.n)

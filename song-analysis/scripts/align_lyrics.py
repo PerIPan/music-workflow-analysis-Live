@@ -116,6 +116,28 @@ def locate(t, downbeats, grouping):
     return [i + 1, cell + 1]
 
 
+def sung_not_in_text(lines, ref_tokens, pairs, hyp, gap=1.5):
+    """{line index: [words]} - Whisper words just before a line's first matched word (within
+    gap s, after the previous line's last match) that no canonical word took: words the
+    singer sings that the lyrics page left out (a lyrics site wrote "Coming back for you",
+    the singer sang "I'm coming back for you")."""
+    used = set(pairs.values())
+    out, k, prev_last = {}, 0, -1
+    for li, l in enumerate(lines):
+        idx = range(k, k + len(l["words"]))
+        k += len(l["words"])
+        hits = [pairs[i] for i in idx if i in pairs]
+        if not hits:
+            continue
+        first = min(hits)
+        extra = [hyp[j]["word"].strip() for j in range(max(prev_last + 1, 0), first)
+                 if j not in used and hyp[first]["start"] - hyp[j]["start"] <= gap]
+        if extra:
+            out[li] = extra
+        prev_last = max(hits)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--lyrics", required=True, help="canonical lyrics text")
@@ -173,6 +195,9 @@ def main():
         out_lines.append(dict(text=l["text"], section=l["section"], start=st, end=en,
                               matched=round(matched / max(n, 1), 2),
                               where=where(st) if st is not None else None))
+    extra = sung_not_in_text(lines, ref_tokens, pairs, hyp)
+    for li, ws in extra.items():
+        out_lines[li]["sung_before"] = ws
     secs = []
     for s in sections:
         first = out_lines[s["first_line"]]
@@ -187,6 +212,9 @@ def main():
     print(f"{len(lines)} lines, {len(sections)} sections; {len(pairs)}/{len(ref_tokens)} "
           f"canonical words matched ({len(pairs) / max(len(ref_tokens), 1):.0%}); "
           f"{len(weak)} lines under 30% matched (timing interpolated - check by ear)")
+    for li, ws in sorted(extra.items()):
+        print(f"SUNG, NOT IN THE TEXT: line {li + 1} - Whisper heard {' '.join(ws)!r} just "
+              f"before it; if the singer sings it, add it to lyrics.txt (CHECK BY EAR)")
     for s in secs:
         print(f"  {s['label']:10s} {s['t'] if s['t'] is None else round(s['t'], 2)}s "
               f"{'' if not s['where'] else 'bar %d cell %d' % tuple(s['where'])}  {s['first_line'][:40]}")

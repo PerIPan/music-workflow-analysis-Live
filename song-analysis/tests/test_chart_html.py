@@ -128,7 +128,7 @@ def main():
         print(f"{'PASS' if cond else 'FAIL'}  {name}" + ("" if cond else f"  [{info}]"))
 
     d = make_song([2, 2], 2.0, 8, CHORDS, EVIDENCE, WORDS, ACT, t0=1.0)
-    doc, cells = build(SONG, d, "main.html")
+    doc, cells = build(dict(SONG, placement="anchor"), d, "main.html")
     C = at(cells, 2)
     L = {k: lyric(v) for k, v in C.items()}
     check("16 cells, one per half-bar", len(cells) == 16, len(cells))
@@ -271,7 +271,7 @@ def main():
         ch = {(b, c): "C" for b in range(1, last + 1) for c in range(1, n + 1)}
         d = make_song(grouping, bar_len, nbars, ch, words=words)
         doc, cells = build(dict(title="Lyric", artist="Nobody", words="words.json", chords=ch,
-                                sections=sections, lyrics=lyrics), d, name)
+                                sections=sections, lyrics=lyrics, placement="anchor"), d, name)
         return doc, {k: v[4] for k, v in at(cells, n).items() if v[4]}
 
     _, P = placed([3], 1.5, 5, [("Verse", 1, 3, "verse", ""), ("Chorus", 4, 5, "chorus", "")],
@@ -342,7 +342,7 @@ def main():
           P)
     _, P = placed([2, 2], 2.0, 4, [("Verse", 1, 4, "verse", "")],
                   {(2, 1): ("paper boats — ohhh", ""), (3, 1): ("harbour", "")},
-                  [("paper", 2.1), ("boats", 2.4), ("ohhh", 2.7), ("♪", 3.6), ("harbour", 4.1)],
+                  [("paper", 2.1), ("boats", 2.4), ("ohhh", 2.5), ("♪", 3.6), ("harbour", 4.1)],
                   "punct.html")
     check("a '♪' token or a dash is no word", P == {(2, 1): "paper boats — ohhh",
                                                   (3, 1): "harbour"}, P)
@@ -553,7 +553,7 @@ def main():
           and "chart_html: KeyError" in r.stderr and "Traceback" not in r.stderr, r.stderr)
     # ---------------------------------------------------- the push and the band's stops
     ch = {(b, c): ("Cmaj7" if b % 2 else "Em") for b in range(1, 5) for c in (1, 2)}
-    d = make_song([2, 2], 2.0, 4, ch, words=[("made", 0.1), ("a", 0.4), ("call", 0.75),
+    d = make_song([2, 2], 2.0, 4, ch, words=[("made", 0.1), ("a", 0.4), ("call", 0.55),
                                              ("to", 1.2), ("my", 1.5), ("other", 1.7),
                                              ("life", 2.3), ("once", 3.4), ("more", 3.7)])
     _, cells = build(dict(title="Push", artist="Nobody", words="words.json", chords=ch,
@@ -561,8 +561,8 @@ def main():
                           lyrics={(1, 1): ("made a call to my other life", ""),
                                   (2, 2): ("once more", "")}), d, "push.html")
     P = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
-    check("a word sung within a dotted eighth of a chord change lands on the new chord; one "
-          "earlier stays; between two cells of one chord nothing moves",
+    check("a word sung within a dotted eighth of the next cell and held lands in it; one "
+          "earlier stays",
           P == {(1, 1): "made a call", (1, 2): "to my", (2, 1): "other life",
                 (2, 2): "once", (3, 1): "more"}, P)
     d = make_song([2, 2], 2.0, 4, ch, words=[("so", 3.2), ("I", 3.62), ("stepped", 3.88),
@@ -573,6 +573,20 @@ def main():
     P = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
     check("a quick pickup into a pushed word stays: 'so I' | 'stepped outside'",
           P == {(2, 2): "so I", (3, 1): "stepped outside"}, P)
+    d = make_song([2, 2], 2.0, 4, ch, words=[("and", 3.4), ("this", 3.6), ("double", 4.3),
+                                             ("life", 4.6), ("tonight", 5.1)])
+    lyr = {(3, 1): ("and this double life tonight", "")}
+    _, cells = build(dict(title="Sung", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")], lyrics=lyr), d, "sung.html")
+    P = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    _, cells = build(dict(title="Sung", artist="Nobody", words="words.json", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")], lyrics=lyr,
+                          placement="anchor"), d, "anchored.html")
+    A = {k: re.sub("<[^>]+>", "", v[4]) for k, v in at(cells, 2).items() if v[4]}
+    check("placement 'sung' (default): opening words stay where sung, before the anchor; "
+          "'anchor' pulls them in",
+          P == {(2, 2): "and this", (3, 1): "double life", (3, 2): "tonight"} and
+          A == {(3, 1): "and this double life", (3, 2): "tonight"}, (P, A))
     ch = {(b, c): ("N.C." if b == 4 else "Am") for b in range(1, 5) for c in (1, 2)}
     d = make_song([2, 2], 2.0, 4, ch)
     (d / "analysis" / "band_level.json").write_text(json.dumps(
@@ -588,6 +602,17 @@ def main():
     doc, _ = build(dict(title="Stops", artist="Nobody", chords=ch,
                         sections=[("Verse", 1, 4, "verse", "")]), make_song([2, 2], 2.0, 4, ch),
                    "nostops.html")
+    ev = {(1, 2): ("C:maj", "root-disagree", "C", None), (3, 2): ("C:maj", "root-disagree", "C", None)}
+    d = make_song([2, 2], 2.0, 4, ch, evidence=ev)
+    (d / "analysis" / "band_level.json").write_text(json.dumps(
+        {"grouping": [2, 2], "cells": [[b, k, 0.05 if b == 1 else 1.0] for b in (1, 2, 3, 4)
+                                       for k in (1, 2)]}))
+    _, cells = build(dict(title="Stops", artist="Nobody", chords=ch,
+                          sections=[("Verse", 1, 4, "verse", "")]), d, "stopq.html")
+    C = at(cells, 2)
+    check("no '?' in a stop bar (nothing to read: the chart keeps the loop); elsewhere it stays",
+          "q" not in C[(1, 2)][0].split() and "q" in C[(3, 2)][0].split(),
+          (C[(1, 2)][0], C[(3, 2)][0]))
     check("no band_level.json: no stops, no legend line", "Grey chord" not in doc and
           'class="half stop' not in doc)
     sys.exit(1 if fails else 0)

@@ -293,7 +293,9 @@ python3 scripts/align_lyrics.py --lyrics lyrics.txt --words analysis/lyrics.json
 Keeps the **canonical text** and borrows only Whisper's times: a monotonic alignment with
 fuzzy word matching (accents and Greek final sigma normalised) pairs canonical words with
 heard words; dropped lines — normal on repeats — get times interpolated between matched
-neighbours, and lines under 30% matched are flagged. In `lyrics.txt` a blank line starts a
+neighbours, and lines under 30% matched are flagged; `SUNG, NOT IN THE TEXT` names Whisper
+words sung just before a line that the page left out ("I'm coming back…" written
+"Coming back…") — check by ear, add them. In `lyrics.txt` a blank line starts a
 section and a `[Chorus]` line labels it; each section gets its first line's time and
 `(bar, cell)`. On the benchmark, 83% of line starts landed within 1 s (median error
 ~0.5 s) and 98% of section starts within 2 s. Automatic segmentation can *suggest* boundaries, never decide them:
@@ -347,7 +349,11 @@ converts them. Read `references/chart-and-lyrics.md` first. Core invariants:
 - Each section starts a new row; parallel sections get identical row splits.
 - Chart bar = audio bar; the renderer adds none (a final chord may ring on the bar that
   starts at the last downbeat).
-- **Lyric phrases anchor at the chord they resolve INTO** (Rule 1 — the big one).
+- **Every word sits where it is sung** (Rule 1, player-checked): a word held across a
+  half-bar boundary, sung within a dotted eighth before it, sits after it ("…once more"
+  on the next bar's chord); stop bars (the band out under the voice) are greyed, with no
+  "?". `placement: 'anchor'` (pickups pulled into the chord the phrase resolves into) only
+  if the band asks for it.
 - **Show the evidence:** the `provenance` line says where meter, grouping and mode came
   from (`foundation.json` → `provenance`, `mode.json`); the renderer marks "?" where a
   cell's own reading names another root, so the player's check goes where it's needed.
@@ -410,7 +416,10 @@ declaring the chart done.
    `beats_per_bar` and a key-gated major bias both produced confident wrong answers that
    survived every downstream check.
 3. Chord-recognition tools are starting points, never ground truth.
-4. Whisper timing is precise; musical placement is not strict timing (Rule 1).
+4. Whisper timing is precise to the consonant; the singer pushes into the beat — place
+   by timing plus the push (Rule 1), and score any placement change against the player's
+   corrections before showing a new chart. A lyrics page can drop sung words:
+   `align_lyrics.py` prints `SUNG, NOT IN THE TEXT`.
 5. `basic-pitch` duplicates notes at exact octaves and invents low-register content the
    stem doesn't contain. Floor it at the instrument's range (C3 for a piano out of
    `other.wav`) before pushing anything to Ableton.
